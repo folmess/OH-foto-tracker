@@ -13,7 +13,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export function BottomSheetHandle() {
-  return <span className="h-1.5 w-12 rounded-full bg-ink/20" aria-hidden="true" />;
+  return <span className="h-1.5 w-14 rounded-full bg-ink/20 transition-colors hover:bg-ink/30" aria-hidden="true" />;
 }
 
 export function BottomSheetScaffold({
@@ -27,7 +27,7 @@ export function BottomSheetScaffold({
 }: {
   state: BottomSheetState;
   onStateChange: (state: BottomSheetState) => void;
-  title: string;
+  title: string | null;
   summary?: string;
   badge?: string;
   headerActions?: ReactNode;
@@ -66,8 +66,13 @@ export function BottomSheetScaffold({
     const closest = distances.sort((a, b) => a.distance - b.distance)[0].snap;
     setDragOffset(null);
     dragStart.current = null;
+    if (closest !== state) {
+      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(5);
+    }
     onStateChange(closest);
   }
+
+  const transitionDuration = state === "collapsed" || dragOffset !== null ? "200ms" : "300ms";
 
   return (
     <section
@@ -76,10 +81,10 @@ export function BottomSheetScaffold({
         bottom: "calc(78px + env(safe-area-inset-bottom))",
         height: sheetHeight,
         transform: `translate3d(0, ${translateY}px, 0)`,
-        transition: dragOffset === null ? "transform 260ms cubic-bezier(.2,.8,.2,1)" : "none",
+        transition: dragOffset === null ? `transform ${transitionDuration} cubic-bezier(.2,.8,.2,1)` : "none",
         touchAction: "none"
       }}
-      aria-label={title}
+      aria-label={title ?? undefined}
     >
       <div
         className="shrink-0 cursor-grab touch-none rounded-t-[28px] bg-white px-4 pb-2 pt-3 active:cursor-grabbing"
@@ -100,18 +105,26 @@ export function BottomSheetScaffold({
           <BottomSheetHandle />
         </div>
         <div className="space-y-2">
-          <button
-            onClick={() => onStateChange(state === "expanded" ? "partial" : "expanded")}
-            className="flex min-h-14 w-full items-center justify-between gap-4 text-left"
-            aria-label={state === "expanded" ? "Contraer panel" : "Expandir panel"}
-          >
-            <span>
-              <span className="block text-base font-extrabold text-ink">{title}</span>
-              {summary && <span className="mt-0.5 block text-xs font-semibold text-ink/55">{summary}</span>}
-            </span>
-            <span className="shrink-0 rounded-full bg-mist px-3 py-1 text-xs font-bold text-ink">{badge ?? state}</span>
-          </button>
-          {headerActions}
+          {(title || badge) && (
+            <button
+              onClick={() => onStateChange(state === "expanded" ? "partial" : "expanded")}
+              className="flex min-h-14 w-full items-center justify-between gap-4 text-left"
+              aria-label={state === "expanded" ? "Contraer panel" : "Expandir panel"}
+            >
+              {title && (
+                <span>
+                  <span className="block text-base font-extrabold text-ink">{title}</span>
+                  {summary && <span className="mt-0.5 block text-xs font-semibold text-ink/55">{summary}</span>}
+                </span>
+              )}
+              {badge && <span className="shrink-0 rounded-full bg-mist px-3 py-1 text-xs font-bold text-ink">{badge}</span>}
+            </button>
+          )}
+          {headerActions && (
+            <div className={`flex items-center justify-end ${!(title || badge) ? "mb-2" : ""}`}>
+              {headerActions}
+            </div>
+          )}
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4" style={{ WebkitOverflowScrolling: "touch" }}>

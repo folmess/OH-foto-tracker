@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowLeft, ExternalLink, X } from "lucide-react";
+import { ArrowLeft, ExternalLink, X, MapPin, Clock, MoreHorizontal, MessageSquare } from "lucide-react";
 import type { ActivityLog, LocationPoint, Place, Profile } from "@/types";
 import { PhotographerBadge, PriorityBadge, StatusBadge } from "./badges";
 import { ActivityLogView } from "./activity-log";
 import { supabase } from "@/lib/supabase";
-import { calculateDistance, formatDistance, formatOpeningHours, getOpeningSlots, todayHours } from "@/lib/place-utils";
+import { calculateDistance, formatDistance, formatOpeningHours, getOpeningSlots, todayHours, isOpenNow } from "@/lib/place-utils";
 
 export function PlaceDetailSheetContent({
   place,
@@ -26,6 +26,8 @@ export function PlaceDetailSheetContent({
   onBack?: () => void;
 }) {
   const [note, setNote] = useState("");
+  const [showNoteInput, setShowNoteInput] = useState(false);
+  const [showMoreActions, setShowMoreActions] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +38,7 @@ export function PlaceDetailSheetContent({
   const assignedToMe = currentPlace.assigned_photographer_id === currentProfile.id;
   const canUnassign = assignedToMe || currentProfile.role === "admin";
   const distance = userLocation ? calculateDistance(userLocation.lat, userLocation.lng, place.lat, place.lng) : null;
+  const open = isOpenNow(place);
 
   async function run(action: "assign" | "unassign" | "in_progress" | "completed" | "issue" | "skipped" | "note" | "reopen") {
     setBusy(true);
@@ -60,6 +63,7 @@ export function PlaceDetailSheetContent({
       return;
     }
     setNote("");
+    setShowNoteInput(false);
   }
 
   const primary =
@@ -75,67 +79,121 @@ export function PlaceDetailSheetContent({
     <div className="p-4">
       <div className="flex items-start justify-between gap-3">
         {onBack && (
-          <button onClick={onBack} className="mr-1 mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-full bg-mist text-ink" aria-label="Volver a la lista">
+          <button onClick={onBack} className="mr-1 mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-mist text-ink transition active:scale-95" aria-label="Volver a la lista">
             <ArrowLeft size={20} />
           </button>
         )}
-        <div>
-          <h2 className="text-xl font-bold text-ink">{place.place_number ? `${place.place_number} · ` : ""}{place.name}</h2>
-          <p className="mt-1 text-sm text-ink/65">{place.full_address || place.address}</p>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              {open && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-river opacity-75"></span>}
+              <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${open ? "bg-river" : "bg-coral"}`}></span>
+            </span>
+            <h2 className="text-xl font-extrabold text-ink leading-tight">{place.place_number ? `${place.place_number} · ` : ""}{place.name}</h2>
+          </div>
+          <div className="mt-1.5 flex items-start gap-2">
+            <p className="text-sm font-medium text-ink/65 leading-snug flex-1">{place.full_address || place.address}</p>
+            <a href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`} target="_blank" rel="noreferrer" className="shrink-0 grid h-8 w-8 place-items-center rounded-full bg-field text-ink transition hover:bg-mist active:scale-95" title="Abrir en Maps">
+              <ExternalLink size={16} />
+            </a>
+          </div>
         </div>
-        <button onClick={onClose} className="rounded-full bg-mist p-2" aria-label="Cerrar">
+        <button onClick={onClose} className="rounded-full bg-mist p-2 transition active:scale-95" aria-label="Cerrar">
           <X size={18} />
         </button>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
+
+      <div className="mt-4 flex flex-wrap gap-2">
         <StatusBadge status={place.status} />
         <PriorityBadge priority={place.priority} />
         <PhotographerBadge profile={place.assigned_photographer_id ? profileById.get(place.assigned_photographer_id) : null} />
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-        <div className="rounded-md bg-field p-3">
-          <p className="font-semibold">Horario</p>
-          <p className="text-ink/70">{todayHours(place)}</p>
-        </div>
-        <div className="rounded-md bg-field p-3">
-          <p className="font-semibold">Distancia</p>
-          <p className="text-ink/70">{distance === null ? "Sin ubicacion" : formatDistance(distance)}</p>
-        </div>
-      </div>
-      <p className="mt-3 rounded-md bg-field p-3 text-sm font-semibold text-ink/75">{formatOpeningHours(getOpeningSlots(place))}</p>
-      {place.completed_at && (
-        <p className="mt-3 rounded-md bg-mist p-3 text-sm">
-          Fotografiado por {place.completed_by ? profileById.get(place.completed_by)?.full_name : "usuario"} el {new Date(place.completed_at).toLocaleString("es-AR")}.
-        </p>
-      )}
-      <a className="mt-3 inline-flex items-center gap-2 rounded-md bg-ink px-3 py-2 text-sm font-semibold text-white" href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`} target="_blank" rel="noreferrer">
-        <ExternalLink size={16} />
-        Abrir en Google Maps
-      </a>
-      <textarea
-        value={note}
-        onChange={(event) => setNote(event.target.value)}
-        className="mt-4 min-h-24 w-full rounded-md border border-black/15 p-3 text-sm"
-        placeholder="Nota para problema, descarte o actividad"
-      />
-      {error && <p className="mt-2 rounded-md bg-coral/10 p-2 text-sm text-coral">{error}</p>}
-      <div className="mt-3 grid grid-cols-2 gap-2">
+
+      {error && <p className="mt-4 rounded-xl bg-coral/10 p-3 text-sm font-semibold text-coral">{error}</p>}
+
+      <div className="mt-5 space-y-3">
         {primary && (
-          <button disabled={busy} onClick={() => run(primary.action)} className="col-span-2 rounded-md bg-river px-4 py-3 font-bold text-white disabled:opacity-60">
+          <button disabled={busy} onClick={() => run(primary.action)} className="w-full rounded-xl bg-river px-4 py-4 text-center font-bold text-white shadow-lg shadow-river/20 transition active:scale-[0.98] disabled:opacity-60">
             {primary.label}
           </button>
         )}
-        <button disabled={busy} onClick={() => run("in_progress")} className="rounded-md bg-amber px-3 py-3 font-semibold text-white disabled:opacity-60">En progreso</button>
-        <button disabled={busy} onClick={() => run("completed")} className="rounded-md bg-river px-3 py-3 font-semibold text-white disabled:opacity-60">Fotografiado</button>
-        <button disabled={busy} onClick={() => run("issue")} className="rounded-md bg-coral px-3 py-3 font-semibold text-white disabled:opacity-60">Problema</button>
-        <button disabled={busy} onClick={() => run("skipped")} className="rounded-md bg-ink/70 px-3 py-3 font-semibold text-white disabled:opacity-60">Descartar</button>
-        <button disabled={busy || !note.trim()} onClick={() => run("note")} className="rounded-md bg-mist px-3 py-3 font-semibold text-ink disabled:opacity-60">Agregar nota</button>
-        {canUnassign && <button disabled={busy} onClick={() => run("unassign")} className="rounded-md bg-mist px-3 py-3 font-semibold text-ink disabled:opacity-60">Liberar</button>}
-        {currentProfile.role === "admin" && <button disabled={busy} onClick={() => run("reopen")} className="rounded-md bg-mist px-3 py-3 font-semibold text-ink disabled:opacity-60">Reabrir</button>}
+
+        {showNoteInput && (
+          <div className="animate-fade-in rounded-xl border border-black/10 bg-white p-2 shadow-sm">
+            <textarea
+              autoFocus
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              className="min-h-24 w-full resize-none rounded-lg bg-field p-3 text-sm outline-none placeholder:text-ink/40"
+              placeholder="Escribir una nota sobre el lugar..."
+            />
+            <div className="mt-2 flex justify-end gap-2">
+              <button onClick={() => setShowNoteInput(false)} className="rounded-lg px-4 py-2 text-sm font-bold text-ink/60">Cancelar</button>
+              <button disabled={busy || !note.trim()} onClick={() => run("note")} className="rounded-lg bg-ink px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Guardar</button>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          {!showNoteInput && (
+            <button disabled={busy} onClick={() => setShowNoteInput(true)} className="flex items-center justify-center gap-2 rounded-xl bg-mist px-3 py-3.5 text-sm font-bold text-ink transition active:scale-[0.98] disabled:opacity-60">
+              <MessageSquare size={16} />
+              Agregar nota
+            </button>
+          )}
+          
+          <button onClick={() => setShowMoreActions(!showMoreActions)} className={`flex items-center justify-center gap-2 rounded-xl bg-mist px-3 py-3.5 text-sm font-bold text-ink transition active:scale-[0.98] ${showNoteInput ? "col-span-2" : ""}`}>
+            <MoreHorizontal size={16} />
+            {showMoreActions ? "Ocultar acciones" : "Más acciones"}
+          </button>
+        </div>
+
+        {showMoreActions && (
+          <div className="animate-slide-up grid grid-cols-2 gap-2 pt-2">
+            <button disabled={busy} onClick={() => run("in_progress")} className="rounded-xl border border-amber/30 bg-amber/5 px-3 py-3 text-sm font-bold text-amber-700 transition active:scale-95 disabled:opacity-50">En progreso</button>
+            <button disabled={busy} onClick={() => run("completed")} className="rounded-xl border border-river/30 bg-river/5 px-3 py-3 text-sm font-bold text-river transition active:scale-95 disabled:opacity-50">Fotografiado</button>
+            <button disabled={busy} onClick={() => run("issue")} className="rounded-xl border border-coral/30 bg-coral/5 px-3 py-3 text-sm font-bold text-coral transition active:scale-95 disabled:opacity-50">Reportar problema</button>
+            <button disabled={busy} onClick={() => run("skipped")} className="rounded-xl border border-ink/20 bg-ink/5 px-3 py-3 text-sm font-bold text-ink transition active:scale-95 disabled:opacity-50">Descartar</button>
+            {canUnassign && <button disabled={busy} onClick={() => run("unassign")} className="col-span-2 rounded-xl border border-ink/10 bg-field px-3 py-3 text-sm font-bold text-ink transition active:scale-95 disabled:opacity-50">Liberar asignación</button>}
+            {currentProfile.role === "admin" && <button disabled={busy} onClick={() => run("reopen")} className="col-span-2 rounded-xl border border-ink/10 bg-field px-3 py-3 text-sm font-bold text-ink transition active:scale-95 disabled:opacity-50">Reabrir lugar (Admin)</button>}
+          </div>
+        )}
       </div>
-      {place.notes && <p className="mt-4 whitespace-pre-wrap rounded-md bg-field p-3 text-sm text-ink/75">{place.notes}</p>}
-      <h3 className="mt-5 font-bold">Historial reciente</h3>
-      <div className="mt-2">
+
+      <div className="mt-6 rounded-2xl bg-field p-4">
+        <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-ink/50">Información del lugar</h4>
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <MapPin size={18} className="mt-0.5 shrink-0 text-ink/40" />
+            <div>
+              <p className="text-sm font-semibold text-ink">{distance === null ? "Distancia desconocida" : `A ${formatDistance(distance)}`}</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <Clock size={18} className="mt-0.5 shrink-0 text-ink/40" />
+            <div>
+              <p className="text-sm font-semibold text-ink">{todayHours(place)}</p>
+              <p className="mt-0.5 text-xs font-medium text-ink/65">{formatOpeningHours(getOpeningSlots(place))}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {place.completed_at && (
+        <p className="mt-4 rounded-xl bg-mist px-4 py-3 text-sm font-medium text-ink">
+          Fotografiado por {place.completed_by ? profileById.get(place.completed_by)?.full_name : "usuario"} el {new Date(place.completed_at).toLocaleString("es-AR")}.
+        </p>
+      )}
+
+      {place.notes && (
+        <div className="mt-4 rounded-2xl border border-amber/20 bg-amber/5 p-4">
+          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-900/60">Notas públicas</h4>
+          <p className="whitespace-pre-wrap text-sm font-medium text-amber-900">{place.notes}</p>
+        </div>
+      )}
+
+      <h3 className="mt-8 font-extrabold text-ink">Historial reciente</h3>
+      <div className="mt-3">
         <ActivityLogView items={placeActivity} profileById={profileById} />
       </div>
     </div>
@@ -152,7 +210,7 @@ export function PlaceDrawer(props: {
 }) {
   if (!props.place) return null;
   return (
-    <aside className="fixed inset-x-0 bottom-0 z-[900] max-h-[82vh] overflow-y-auto rounded-t-lg bg-white shadow-panel md:absolute md:inset-y-0 md:right-0 md:left-auto md:w-[430px] md:rounded-none">
+    <aside className="fixed inset-x-0 bottom-0 z-[900] max-h-[85vh] overflow-y-auto rounded-t-3xl bg-white shadow-sheet md:absolute md:inset-y-0 md:right-0 md:left-auto md:w-[430px] md:rounded-none">
       <PlaceDetailSheetContent {...props} />
     </aside>
   );

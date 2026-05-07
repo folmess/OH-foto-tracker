@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import { MapContainer, Marker, TileLayer, useMap } from "react-leaflet";
 import type { LocationPoint, Place, Profile } from "@/types";
@@ -10,12 +10,23 @@ function isValidPoint(point?: LocationPoint | null): point is LocationPoint {
   return !!point && Number.isFinite(point.lat) && Number.isFinite(point.lng);
 }
 
-function markerIcon(color: string, borderColor: string, label?: string | null, selected = false) {
+function markerIcon(color: string, borderColor: string, label?: string | null, selected = false, isHigh = false) {
+  const size = selected ? 42 : 34;
+  const extraClass = selected ? " place-marker-selected" : isHigh ? " place-marker-high" : "";
   return L.divIcon({
     className: "",
-    html: `<div class="place-marker${selected ? " place-marker-selected" : ""}" style="width:${selected ? 36 : 28}px;height:${selected ? 36 : 28}px;background:${color};border-color:${borderColor}">${label ?? ""}</div>`,
-    iconSize: selected ? [36, 36] : [28, 28],
-    iconAnchor: selected ? [18, 18] : [14, 14]
+    html: `<div class="place-marker${extraClass}" style="width:${size}px;height:${size}px;background:${color};border-color:${borderColor}">${label ?? ""}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2]
+  });
+}
+
+function userLocationIcon() {
+  return L.divIcon({
+    className: "",
+    html: `<div class="user-marker" style="width:18px;height:18px;background:#4285F4;border:3px solid white;border-radius:999px;box-shadow:0 2px 8px rgba(66,133,244,0.45)"></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9]
   });
 }
 
@@ -31,10 +42,14 @@ function RecenterMap({ center, focusBottomInset = 0 }: { center?: LocationPoint 
       if (!Number.isFinite(size.x) || !Number.isFinite(size.y) || size.x <= 0 || size.y <= 0) return;
       map.invalidateSize({ animate: false });
       const currentZoom = map.getZoom();
-      const zoom = Number.isFinite(currentZoom) ? Math.max(currentZoom, 15) : 15;
-      map.setView([target.lat, target.lng], zoom, { animate: false });
+      const zoom = Number.isFinite(currentZoom) ? Math.max(currentZoom, 16) : 16;
+      
+      const targetPoint = map.project([target.lat, target.lng], zoom);
       const offset = Math.max(0, Math.min(focusBottomInset, size.y * 0.72)) / 2;
-      if (offset > 0) map.panBy([0, offset], { animate: true, duration: 0.45 });
+      targetPoint.y -= offset;
+      const finalCenter = map.unproject(targetPoint, zoom);
+      
+      map.setView(finalCenter, zoom, { animate: true, duration: 0.45 });
     }, 80);
     return () => {
       cancelled = true;
@@ -60,7 +75,7 @@ function KeepMapSized() {
 
 function UserLocationMarker({ userLocation }: { userLocation?: LocationPoint | null }) {
   if (!isValidPoint(userLocation)) return null;
-  return <Marker position={[userLocation.lat, userLocation.lng]} icon={markerIcon("#17201f", "#ffffff", "YO")} />;
+  return <Marker position={[userLocation.lat, userLocation.lng]} icon={userLocationIcon()} />;
 }
 
 function PlaceMarker({
@@ -79,7 +94,8 @@ function PlaceMarker({
   return (
     <Marker
       position={[place.lat, place.lng]}
-      icon={markerIcon(style.color, style.borderColor, place.place_number, selected)}
+      icon={markerIcon(style.color, style.borderColor, place.place_number, selected, place.priority === "high")}
+      zIndexOffset={place.priority === "high" ? 200 : selected ? 1000 : 0}
       eventHandlers={{ click: () => onSelect(place) }}
     />
   );
@@ -87,7 +103,12 @@ function PlaceMarker({
 
 function FitPlaces({ places, fitBoundsKey, focusBottomInset = 0 }: { places: Place[]; fitBoundsKey: number; focusBottomInset?: number }) {
   const map = useMap();
+  const previousKeyRef = useRef(-1);
+
   useEffect(() => {
+    if (previousKeyRef.current === fitBoundsKey) return;
+    previousKeyRef.current = fitBoundsKey;
+
     const validPlaces = places.filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lng));
     if (!validPlaces.length) return;
     const timeout = window.setTimeout(() => {
@@ -139,7 +160,10 @@ export function MapView({
 
   return (
     <MapContainer center={initialCenter} zoom={13} scrollWheelZoom className="z-0">
-      <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      <TileLayer
+        attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+      />
       <KeepMapSized />
       <RecenterMap center={center} focusBottomInset={focusBottomInset} />
       <FitPlaces places={places} fitBoundsKey={fitBoundsKey} focusBottomInset={focusBottomInset} />

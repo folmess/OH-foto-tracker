@@ -1,5 +1,5 @@
 @import "leaflet/dist/leaflet.css";
-@import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800;900&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -14,6 +14,9 @@ body {
   min-height: 100%;
   background: #f8faf8;
   color: #17201f;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
@@ -26,14 +29,17 @@ body {
   font: inherit;
 }
 
+/* ── Map markers ─────────────────────────────────── */
+
 .place-marker {
   align-items: center;
-  border: 2px solid white;
+  border: 2.5px solid white;
   border-radius: 999px;
   box-shadow: 0 2px 10px rgba(23, 32, 31, 0.28);
   color: white;
   display: flex;
-  font-size: 10px;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 11px;
   font-weight: 800;
   justify-content: center;
   line-height: 1;
@@ -43,8 +49,89 @@ body {
 
 .place-marker-selected {
   box-shadow: 0 0 0 4px rgba(20, 122, 115, 0.22), 0 10px 24px rgba(23, 32, 31, 0.28);
-  transform: translateZ(0) scale(1.02);
+  transform: translateZ(0) scale(1.08);
 }
+
+.place-marker-high {
+  box-shadow: 0 0 0 3px rgba(212, 91, 69, 0.35), 0 2px 10px rgba(23, 32, 31, 0.28);
+}
+
+/* ── User location pulse ─────────────────────────── */
+
+.user-marker {
+  position: relative;
+}
+
+.user-marker::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 999px;
+  border: 2.5px solid rgba(66, 133, 244, 0.45);
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 1;
+  }
+  70% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+}
+
+/* ── Animations ──────────────────────────────────── */
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.animate-fade-in {
+  animation: fade-in 250ms ease both;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #eef3f0 25%, #dce5df 50%, #eef3f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* ── Utilities ───────────────────────────────────── */
 
 .scrollbar-none {
   scrollbar-width: none;

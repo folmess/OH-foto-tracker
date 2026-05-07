@@ -104,7 +104,18 @@ export function DashboardPage() {
     );
   }
 
-  if (loading) return <main className="flex min-h-screen items-center justify-center bg-field text-sm font-semibold">Cargando...</main>;
+  if (loading) {
+    return (
+      <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-field p-5">
+        <div className="flex flex-col items-center animate-pulse">
+          <div className="h-20 w-20 rounded-3xl bg-mist flex items-center justify-center shadow-inner">
+            <span className="font-bebas text-3xl text-ink/30">OH</span>
+          </div>
+          <p className="mt-4 text-sm font-bold tracking-wide text-ink/50">Cargando Open House...</p>
+        </div>
+      </main>
+    );
+  }
   if (!user) return <LoginPage />;
   if (!profile) {
     return (

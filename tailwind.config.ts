@@ -13,9 +13,11 @@ const config: Config = {
         amber: "#c98217"
       },
       boxShadow: {
-        panel: "0 12px 34px rgba(23, 32, 31, 0.16)"
+        panel: "0 12px 34px rgba(23, 32, 31, 0.16)",
+        "sheet": "0 -18px 44px rgba(23, 32, 31, 0.2)"
       },
       fontFamily: {
+        sans: ["Inter", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
         bebas: ["Bebas Neue", "Impact", "Arial Narrow", "sans-serif"]
       }
     }

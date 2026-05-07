@@ -133,7 +133,7 @@ export function MobileMapScreen({
   const mapFocusBottomInset = sheetVisibleHeight + NAV_HEIGHT;
 
   const sheetTitle = useMemo(() => {
-    if (sheetMode === "detail" && selectedPlace) return selectedPlace.name;
+    if (sheetMode === "detail" && selectedPlace) return null;
     if (sheetMode === "filters") return "Filtros y busqueda";
     if (sheetMode === "route") return "Mi recorrido";
     if (sheetMode === "stats") return "Estadisticas";
@@ -142,7 +142,7 @@ export function MobileMapScreen({
   }, [selectedPlace, sheetMode]);
 
   const sheetSummary = useMemo(() => {
-    if (sheetMode === "detail") return "Detalle del lugar seleccionado";
+    if (sheetMode === "detail") return undefined;
     if (sheetMode === "filters") return "Filter chips, orden y resultados";
     if (sheetMode === "route") return userLocation ? "Recomendaciones segun tu ubicacion" : "Activa tu ubicacion para sugerencias";
     if (sheetMode === "stats") return "Resumen del operativo";
@@ -206,7 +206,7 @@ export function MobileMapScreen({
         </div>
       )}
 
-      <div className="pointer-events-none fixed right-3 z-[810]" style={{ bottom: bottomSheetState === "collapsed" ? "calc(350px + env(safe-area-inset-bottom))" : "calc(50vh + env(safe-area-inset-bottom))" }}>
+      <div className="pointer-events-none fixed right-3 z-[810] transition-[bottom] duration-300 ease-[cubic-bezier(.2,.8,.2,1)]" style={{ bottom: `calc(${sheetVisibleHeight + NAV_HEIGHT}px + 16px + env(safe-area-inset-bottom))` }}>
         <FloatingMapActions onUseLocation={onUseLocation} onFitPlaces={() => setFitBoundsKey((key) => key + 1)} onOpenFilters={openFilters} />
       </div>
 

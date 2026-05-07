@@ -1,5 +1,7 @@
 "use client";
 
+import { SearchX } from "lucide-react";
+
 import type { LocationPoint, Place, Profile } from "@/types";
 import { PhotographerBadge, PriorityBadge, StatusBadge } from "./badges";
 import { calculateDistance, closesSoon, formatDistance, todayHours } from "@/lib/place-utils";
@@ -25,7 +27,7 @@ export function PlaceList({
           <button
             key={place.id}
             onClick={() => onSelect(place)}
-            className={`w-full border-b border-black/10 bg-white p-3 text-left ${selectedId === place.id ? "ring-2 ring-inset ring-river" : ""}`}
+            className={`w-full border-b border-black/10 bg-white p-3 text-left transition active:bg-mist ${selectedId === place.id ? "bg-river/5 ring-2 ring-inset ring-river" : ""}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -46,7 +48,15 @@ export function PlaceList({
           </button>
         );
       })}
-      {!places.length && <p className="p-5 text-sm text-ink/60">No hay lugares para esos filtros.</p>}
+      {!places.length && (
+        <div className="flex flex-col items-center justify-center p-12 text-center animate-fade-in">
+          <div className="grid h-16 w-16 place-items-center rounded-full bg-mist text-ink/40">
+            <SearchX size={28} />
+          </div>
+          <p className="mt-4 font-bold text-ink">No hay resultados</p>
+          <p className="mt-1 text-sm text-ink/55">Intenta con otros filtros o términos de búsqueda.</p>
+        </div>
+      )}
     </div>
   );
 }
