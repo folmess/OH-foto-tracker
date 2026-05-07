@@ -178,6 +178,16 @@ export function filterPlaces(
 
 export function sortPlaces(places: Place[], sort: SortKey, userLocation?: LocationPoint | null) {
   const sorted = [...places];
+  if (sort === "recommended") {
+    return sorted.sort((a, b) => {
+      const statusWeight: Record<string, number> = { issue: 5, in_progress: 4, pending: 3, assigned: 2, skipped: 1, completed: 0 };
+      const aDistance = userLocation ? calculateDistance(userLocation.lat, userLocation.lng, a.lat, a.lng) : 0;
+      const bDistance = userLocation ? calculateDistance(userLocation.lat, userLocation.lng, b.lat, b.lng) : 0;
+      const aScore = statusWeight[a.status] * 1000 + priorityWeight[a.priority] * 100 - (userLocation ? aDistance / 100 : 0);
+      const bScore = statusWeight[b.status] * 1000 + priorityWeight[b.priority] * 100 - (userLocation ? bDistance / 100 : 0);
+      return bScore - aScore;
+    });
+  }
   if (sort === "distance" && userLocation) return sortPlacesByDistance(sorted, userLocation);
   if (sort === "priority") return sorted.sort((a, b) => priorityWeight[b.priority] - priorityWeight[a.priority]);
   if (sort === "status") return sorted.sort((a, b) => a.status.localeCompare(b.status));

@@ -66,6 +66,7 @@ export function FiltersBar({
       </div>
       {showSort && (
         <select value={sort} onChange={(event) => onSortChange(event.target.value as SortKey)} className="w-full rounded-md border border-black/10 bg-field px-3 py-2 text-sm font-semibold md:max-w-xs">
+          <option value="recommended">Ordenar por recomendado</option>
           <option value="distance">Ordenar por distancia</option>
           <option value="priority">Ordenar por prioridad</option>
           <option value="closing">Ordenar por cierre</option>

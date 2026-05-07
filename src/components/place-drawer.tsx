@@ -1,20 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ExternalLink, X } from "lucide-react";
+import { ArrowLeft, ExternalLink, X } from "lucide-react";
 import type { ActivityLog, LocationPoint, Place, Profile } from "@/types";
 import { PhotographerBadge, PriorityBadge, StatusBadge } from "./badges";
 import { ActivityLogView } from "./activity-log";
 import { supabase } from "@/lib/supabase";
 import { calculateDistance, formatDistance, formatOpeningHours, getOpeningSlots, todayHours } from "@/lib/place-utils";
 
-export function PlaceDrawer({
+export function PlaceDetailSheetContent({
   place,
   currentProfile,
   profileById,
   activity,
   userLocation,
-  onClose
+  onClose,
+  onBack
 }: {
   place: Place | null;
   currentProfile: Profile;
@@ -22,6 +23,7 @@ export function PlaceDrawer({
   activity: ActivityLog[];
   userLocation?: LocationPoint | null;
   onClose: () => void;
+  onBack?: () => void;
 }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -70,8 +72,13 @@ export function PlaceDrawer({
           : null;
 
   return (
-    <aside className="fixed inset-x-0 bottom-0 z-[900] max-h-[82vh] overflow-y-auto rounded-t-lg bg-white p-4 shadow-panel md:absolute md:inset-y-0 md:right-0 md:left-auto md:w-[430px] md:rounded-none">
+    <div className="p-4">
       <div className="flex items-start justify-between gap-3">
+        {onBack && (
+          <button onClick={onBack} className="mr-1 mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-full bg-mist text-ink" aria-label="Volver a la lista">
+            <ArrowLeft size={20} />
+          </button>
+        )}
         <div>
           <h2 className="text-xl font-bold text-ink">{place.place_number ? `${place.place_number} · ` : ""}{place.name}</h2>
           <p className="mt-1 text-sm text-ink/65">{place.full_address || place.address}</p>
@@ -131,6 +138,22 @@ export function PlaceDrawer({
       <div className="mt-2">
         <ActivityLogView items={placeActivity} profileById={profileById} />
       </div>
+    </div>
+  );
+}
+
+export function PlaceDrawer(props: {
+  place: Place | null;
+  currentProfile: Profile;
+  profileById: Map<string, Profile>;
+  activity: ActivityLog[];
+  userLocation?: LocationPoint | null;
+  onClose: () => void;
+}) {
+  if (!props.place) return null;
+  return (
+    <aside className="fixed inset-x-0 bottom-0 z-[900] max-h-[82vh] overflow-y-auto rounded-t-lg bg-white shadow-panel md:absolute md:inset-y-0 md:right-0 md:left-auto md:w-[430px] md:rounded-none">
+      <PlaceDetailSheetContent {...props} />
     </aside>
   );
 }

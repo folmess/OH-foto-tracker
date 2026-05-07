@@ -6,21 +6,115 @@ import { MapContainer, Marker, TileLayer, useMap } from "react-leaflet";
 import type { LocationPoint, Place, Profile } from "@/types";
 import { getMarkerStyle } from "@/lib/place-utils";
 
-function markerIcon(color: string, borderColor: string, label?: string | null) {
+function isValidPoint(point?: LocationPoint | null): point is LocationPoint {
+  return !!point && Number.isFinite(point.lat) && Number.isFinite(point.lng);
+}
+
+function markerIcon(color: string, borderColor: string, label?: string | null, selected = false) {
   return L.divIcon({
     className: "",
-    html: `<div class="place-marker" style="width:28px;height:28px;background:${color};border-color:${borderColor}">${label ?? ""}</div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14]
+    html: `<div class="place-marker${selected ? " place-marker-selected" : ""}" style="width:${selected ? 36 : 28}px;height:${selected ? 36 : 28}px;background:${color};border-color:${borderColor}">${label ?? ""}</div>`,
+    iconSize: selected ? [36, 36] : [28, 28],
+    iconAnchor: selected ? [18, 18] : [14, 14]
   });
 }
 
-function FlyTo({ center }: { center?: LocationPoint | null }) {
+function RecenterMap({ center, focusBottomInset = 0 }: { center?: LocationPoint | null; focusBottomInset?: number }) {
   const map = useMap();
   useEffect(() => {
-    if (center) map.flyTo([center.lat, center.lng], Math.max(map.getZoom(), 15), { duration: 0.6 });
-  }, [center, map]);
+    if (!isValidPoint(center)) return;
+    const target = center;
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      if (cancelled) return;
+      const size = map.getSize();
+      if (!Number.isFinite(size.x) || !Number.isFinite(size.y) || size.x <= 0 || size.y <= 0) return;
+      map.invalidateSize({ animate: false });
+      const currentZoom = map.getZoom();
+      const zoom = Number.isFinite(currentZoom) ? Math.max(currentZoom, 15) : 15;
+      map.setView([target.lat, target.lng], zoom, { animate: false });
+      const offset = Math.max(0, Math.min(focusBottomInset, size.y * 0.72)) / 2;
+      if (offset > 0) map.panBy([0, offset], { animate: true, duration: 0.45 });
+    }, 80);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [center, focusBottomInset, map]);
   return null;
+}
+
+function KeepMapSized() {
+  const map = useMap();
+  useEffect(() => {
+    const refresh = () => map.invalidateSize({ animate: false });
+    const timeout = window.setTimeout(refresh, 120);
+    window.addEventListener("resize", refresh);
+    return () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener("resize", refresh);
+    };
+  }, [map]);
+  return null;
+}
+
+function UserLocationMarker({ userLocation }: { userLocation?: LocationPoint | null }) {
+  if (!isValidPoint(userLocation)) return null;
+  return <Marker position={[userLocation.lat, userLocation.lng]} icon={markerIcon("#17201f", "#ffffff", "YO")} />;
+}
+
+function PlaceMarker({
+  place,
+  photographer,
+  selected,
+  onSelect
+}: {
+  place: Place;
+  photographer?: Profile | null;
+  selected: boolean;
+  onSelect: (place: Place) => void;
+}) {
+  if (!Number.isFinite(place.lat) || !Number.isFinite(place.lng)) return null;
+  const style = getMarkerStyle(place, photographer);
+  return (
+    <Marker
+      position={[place.lat, place.lng]}
+      icon={markerIcon(style.color, style.borderColor, place.place_number, selected)}
+      eventHandlers={{ click: () => onSelect(place) }}
+    />
+  );
+}
+
+function FitPlaces({ places, fitBoundsKey, focusBottomInset = 0 }: { places: Place[]; fitBoundsKey: number; focusBottomInset?: number }) {
+  const map = useMap();
+  useEffect(() => {
+    const validPlaces = places.filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lng));
+    if (!validPlaces.length) return;
+    const timeout = window.setTimeout(() => {
+      const size = map.getSize();
+      if (!Number.isFinite(size.x) || !Number.isFinite(size.y) || size.x <= 0 || size.y <= 0) return;
+      const bounds = L.latLngBounds(validPlaces.map((place) => [place.lat, place.lng] as [number, number]));
+      map.invalidateSize({ animate: false });
+      map.fitBounds(bounds, { animate: true, duration: 0.55, paddingTopLeft: [46, 46], paddingBottomRight: [46, 46 + focusBottomInset], maxZoom: 15 });
+    }, 80);
+    return () => window.clearTimeout(timeout);
+  }, [fitBoundsKey, focusBottomInset, map, places]);
+  return null;
+}
+
+function hasValidLocation(place: Place) {
+  return Number.isFinite(place.lat) && Number.isFinite(place.lng);
+}
+
+function selectedCenter(place?: Place | null, userLocation?: LocationPoint | null) {
+  if (place && hasValidLocation(place)) return { lat: place.lat, lng: place.lng };
+  if (isValidPoint(userLocation)) return userLocation;
+  return null;
+}
+
+function initialMapCenter(places: Place[]): [number, number] {
+  const first = places.find(hasValidLocation);
+  return first ? [first.lat, first.lng] : [-32.9442, -60.6505];
 }
 
 export function MapView({
@@ -28,31 +122,31 @@ export function MapView({
   profileById,
   selectedPlace,
   userLocation,
+  fitBoundsKey = 0,
+  focusBottomInset = 0,
   onSelect
 }: {
   places: Place[];
   profileById: Map<string, Profile>;
   selectedPlace?: Place | null;
   userLocation?: LocationPoint | null;
+  fitBoundsKey?: number;
+  focusBottomInset?: number;
   onSelect: (place: Place) => void;
 }) {
-  const center = selectedPlace ? { lat: selectedPlace.lat, lng: selectedPlace.lng } : userLocation;
-  const initialCenter = useMemo<[number, number]>(() => {
-    const first = places[0];
-    return first ? [first.lat, first.lng] : [-32.9442, -60.6505];
-  }, [places]);
+  const center = selectedCenter(selectedPlace, userLocation);
+  const initialCenter = useMemo<[number, number]>(() => initialMapCenter(places), [places]);
 
   return (
     <MapContainer center={initialCenter} zoom={13} scrollWheelZoom className="z-0">
       <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      <FlyTo center={center} />
-      {userLocation && <Marker position={[userLocation.lat, userLocation.lng]} icon={markerIcon("#17201f", "#ffffff", "YO")} />}
-      {places.map((place) => {
+      <KeepMapSized />
+      <RecenterMap center={center} focusBottomInset={focusBottomInset} />
+      <FitPlaces places={places} fitBoundsKey={fitBoundsKey} focusBottomInset={focusBottomInset} />
+      <UserLocationMarker userLocation={userLocation} />
+      {places.filter(hasValidLocation).map((place) => {
         const photographer = place.assigned_photographer_id ? profileById.get(place.assigned_photographer_id) : null;
-        const style = getMarkerStyle(place, photographer);
-        return (
-          <Marker key={place.id} position={[place.lat, place.lng]} icon={markerIcon(style.color, style.borderColor, place.place_number)} eventHandlers={{ click: () => onSelect(place) }} />
-        );
+        return <PlaceMarker key={place.id} place={place} photographer={photographer} selected={selectedPlace?.id === place.id} onSelect={onSelect} />;
       })}
     </MapContainer>
   );

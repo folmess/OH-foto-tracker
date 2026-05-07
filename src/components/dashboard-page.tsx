@@ -17,18 +17,21 @@ import { MyRouteView } from "./my-route-view";
 import { MapLegend } from "./map-legend";
 import { GlobalStatsChips } from "./global-stats-chips";
 import { PlacePreviewCard } from "./place-preview-card";
+import { MobileMapScreen } from "./mobile-map-screen";
 
 export function DashboardPage() {
   const { user, profile, profiles, profileById, places, activity, loading, error, refresh } = useAppData();
   const [mode, setMode] = useState<"map" | "list" | "route" | "admin">("map");
   const [filters, setFilters] = useState<Set<FilterKey>>(new Set(["all"]));
   const [sort, setSort] = useState<SortKey>("priority");
+  const [searchQuery, setSearchQuery] = useState("");
   const [previewPlace, setPreviewPlace] = useState<Place | null>(null);
   const [detailPlace, setDetailPlace] = useState<Place | null>(null);
   const [userLocation, setUserLocation] = useState<LocationPoint | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [sheetTouchStart, setSheetTouchStart] = useState<number | null>(null);
+  const [isDesktop, setIsDesktop] = useState(false);
 
   useEffect(() => {
     const savedFilters = window.localStorage.getItem("tracker.filters");
@@ -38,14 +41,30 @@ export function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    const query = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktop(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
     window.localStorage.setItem("tracker.filters", Array.from(filters).join(","));
     window.localStorage.setItem("tracker.sort", sort);
   }, [filters, sort]);
 
   const visiblePlaces = useMemo(() => {
     const filtered = filterPlaces(places, filters, profile?.id, userLocation);
-    return sortPlaces(filtered, sort, userLocation);
-  }, [places, filters, profile?.id, sort, userLocation]);
+    const query = searchQuery.trim().toLocaleLowerCase("es-AR");
+    const searched = query
+      ? filtered.filter((place) =>
+          [place.name, place.place_number, place.full_address, place.address, place.neighborhood, place.city]
+            .filter(Boolean)
+            .some((value) => String(value).toLocaleLowerCase("es-AR").includes(query))
+        )
+      : filtered;
+    return sortPlaces(searched, sort, userLocation);
+  }, [places, filters, profile?.id, searchQuery, sort, userLocation]);
 
   useEffect(() => {
     if (!detailPlace) return;
@@ -100,6 +119,37 @@ export function DashboardPage() {
     );
   }
 
+  if (!isDesktop) {
+    return (
+      <MobileMapScreen
+        places={places}
+        visiblePlaces={visiblePlaces}
+        profiles={profiles}
+        profile={profile}
+        profileById={profileById}
+        activity={activity}
+        filters={filters}
+        sort={sort}
+        searchQuery={searchQuery}
+        selectedPlace={detailPlace}
+        userLocation={userLocation}
+        locationError={locationError}
+        notice={notice}
+        onFiltersChange={setFilters}
+        onSortChange={setSort}
+        onSearchChange={setSearchQuery}
+        onSelectPlace={(place) => {
+          setDetailPlace(place);
+          setPreviewPlace(null);
+        }}
+        onClearSelectedPlace={() => setDetailPlace(null)}
+        onUseLocation={requestLocation}
+        onClearNotice={() => setNotice(null)}
+        refresh={refresh}
+      />
+    );
+  }
+
   return (
     <main className="h-screen overflow-hidden bg-field">
       <header className="flex min-h-16 items-center justify-between gap-2 border-b border-black/10 bg-white px-3 py-2">
@@ -148,7 +198,6 @@ export function DashboardPage() {
               <MapViewDynamic places={visiblePlaces} profileById={profileById} selectedPlace={previewPlace ?? detailPlace} userLocation={userLocation} onSelect={setPreviewPlace} />
               <PlacePreviewCard place={previewPlace} onClose={() => setPreviewPlace(null)} onDetails={(place) => { setDetailPlace(place); setPreviewPlace(null); }} />
               <MapLegend profiles={profiles} />
-              <NearbySuggestions places={places} userLocation={userLocation} onSelect={setPreviewPlace} />
               <button onClick={requestLocation} className="absolute bottom-[calc(34vh+1rem)] right-4 z-[800] rounded-full bg-river p-4 text-white shadow-panel md:bottom-4" aria-label="Usar mi ubicacion">
                 <LocateFixed size={22} />
               </button>
@@ -166,6 +215,7 @@ export function DashboardPage() {
                   <span className="h-1.5 w-12 rounded-full bg-black/20" />
                 </button>
               )}
+              <NearbySuggestions className="m-3" places={places} userLocation={userLocation} onSelect={mode === "map" ? setPreviewPlace : setDetailPlace} />
               <PlaceList places={visiblePlaces} profileById={profileById} userLocation={userLocation} selectedId={(previewPlace ?? detailPlace)?.id} onSelect={mode === "map" ? setPreviewPlace : setDetailPlace} />
             </div>
           </div>

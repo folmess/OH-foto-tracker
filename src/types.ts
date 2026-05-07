@@ -101,4 +101,6 @@ export type FilterKey =
   | "nearby"
   | "closing";
 
-export type SortKey = "distance" | "priority" | "closing" | "status" | "place_number" | "name";
+export type SortKey = "recommended" | "distance" | "priority" | "closing" | "status" | "place_number" | "name";
+export type BottomSheetState = "collapsed" | "partial" | "expanded";
+export type MobileTab = "map" | "list" | "route" | "stats" | "admin";
