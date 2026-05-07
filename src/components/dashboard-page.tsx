@@ -1,0 +1,177 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Footprints, List, LocateFixed, LogOut, Map, Shield } from "lucide-react";
+import type { FilterKey, LocationPoint, Place, SortKey } from "@/types";
+import { useAppData } from "@/hooks/use-app-data";
+import { filterPlaces, sortPlaces } from "@/lib/place-utils";
+import { supabase } from "@/lib/supabase";
+import { LoginPage } from "./login-page";
+import { FiltersBar } from "./filters-bar";
+import { PlaceList } from "./place-list";
+import { PlaceDrawer } from "./place-drawer";
+import { MapViewDynamic } from "./map-view-dynamic";
+import { NearbySuggestions } from "./nearby-suggestions";
+import { AdminPage } from "./admin-page";
+import { MyRouteView } from "./my-route-view";
+import { MapLegend } from "./map-legend";
+import { GlobalStatsChips } from "./global-stats-chips";
+import { PlacePreviewCard } from "./place-preview-card";
+
+export function DashboardPage() {
+  const { user, profile, profiles, profileById, places, activity, loading, error, refresh } = useAppData();
+  const [mode, setMode] = useState<"map" | "list" | "route" | "admin">("map");
+  const [filters, setFilters] = useState<Set<FilterKey>>(new Set(["all"]));
+  const [sort, setSort] = useState<SortKey>("priority");
+  const [previewPlace, setPreviewPlace] = useState<Place | null>(null);
+  const [detailPlace, setDetailPlace] = useState<Place | null>(null);
+  const [userLocation, setUserLocation] = useState<LocationPoint | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [sheetTouchStart, setSheetTouchStart] = useState<number | null>(null);
+
+  useEffect(() => {
+    const savedFilters = window.localStorage.getItem("tracker.filters");
+    const savedSort = window.localStorage.getItem("tracker.sort") as SortKey | null;
+    if (savedFilters) setFilters(new Set(savedFilters.split(",") as FilterKey[]));
+    if (savedSort) setSort(savedSort);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("tracker.filters", Array.from(filters).join(","));
+    window.localStorage.setItem("tracker.sort", sort);
+  }, [filters, sort]);
+
+  const visiblePlaces = useMemo(() => {
+    const filtered = filterPlaces(places, filters, profile?.id, userLocation);
+    return sortPlaces(filtered, sort, userLocation);
+  }, [places, filters, profile?.id, sort, userLocation]);
+
+  useEffect(() => {
+    if (!detailPlace) return;
+    const updated = places.find((place) => place.id === detailPlace.id);
+    if (!updated) return;
+    if (updated.status === "completed" && detailPlace.status !== "completed") {
+      const who = updated.completed_by ? profileById.get(updated.completed_by)?.full_name : "otro usuario";
+      setNotice(`${updated.place_number ? `${updated.place_number} · ` : ""}${updated.name} fue fotografiado por ${who ?? "otro usuario"}.`);
+    }
+    if (
+      updated.assigned_photographer_id &&
+      updated.assigned_photographer_id !== detailPlace.assigned_photographer_id &&
+      updated.assigned_photographer_id !== profile?.id
+    ) {
+      const who = profileById.get(updated.assigned_photographer_id)?.full_name ?? "otro usuario";
+      setNotice(`${updated.place_number ? `${updated.place_number} · ` : ""}${updated.name} ahora esta asignado a ${who}.`);
+    }
+    if (updated !== detailPlace) setDetailPlace(updated);
+  }, [places, profile?.id, profileById, detailPlace]);
+
+  useEffect(() => {
+    if (!previewPlace) return;
+    const updated = places.find((place) => place.id === previewPlace.id);
+    if (updated && updated !== previewPlace) setPreviewPlace(updated);
+  }, [places, previewPlace]);
+
+  function requestLocation() {
+    setLocationError(null);
+    if (!navigator.geolocation) {
+      setLocationError("Este navegador no soporta geolocalizacion.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude }),
+      () => setLocationError("No se pudo obtener tu ubicacion."),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
+  if (loading) return <main className="flex min-h-screen items-center justify-center bg-field text-sm font-semibold">Cargando...</main>;
+  if (!user) return <LoginPage />;
+  if (!profile) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-field p-5">
+        <div className="max-w-sm rounded-lg bg-white p-5 shadow-panel">
+          <h1 className="text-xl font-bold">Acceso no autorizado</h1>
+          <p className="mt-2 text-sm text-ink/65">Tu usuario no tiene un profile activo. Pedile a un admin que cree o active tu perfil.</p>
+          {error && <p className="mt-3 text-sm text-coral">{error}</p>}
+          <button onClick={() => supabase.auth.signOut()} className="mt-4 rounded-md bg-ink px-4 py-3 font-semibold text-white">Salir</button>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="h-screen overflow-hidden bg-field">
+      <header className="flex min-h-16 items-center justify-between gap-2 border-b border-black/10 bg-white px-3 py-2">
+        <div>
+          <h1 className="text-base font-bold leading-tight">Open House Foto Tracker</h1>
+          <p className="text-xs text-ink/60">{profile.full_name}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setMode(mode === "map" ? "list" : "map")} className="flex min-w-16 flex-col items-center gap-1 rounded-md bg-mist px-2 py-2 text-[11px] font-bold" aria-label="Alternar mapa lista">
+            {mode === "map" ? <List size={17} /> : <Map size={17} />}
+            {mode === "map" ? "Ver lista" : "Mapa"}
+          </button>
+          <button onClick={() => setMode(mode === "route" ? "map" : "route")} className="flex min-w-16 flex-col items-center gap-1 rounded-md bg-mist px-2 py-2 text-[11px] font-bold" aria-label="Panel">
+            <Footprints size={17} />
+            Panel
+          </button>
+          {profile.role === "admin" && (
+            <button onClick={() => setMode(mode === "admin" ? "map" : "admin")} className="flex min-w-16 flex-col items-center gap-1 rounded-md bg-mist px-2 py-2 text-[11px] font-bold" aria-label="Admin">
+              <Shield size={17} />
+              Admin
+            </button>
+          )}
+          <button onClick={() => supabase.auth.signOut()} className="flex min-w-16 flex-col items-center gap-1 rounded-md bg-mist px-2 py-2 text-[11px] font-bold" aria-label="Logout">
+            <LogOut size={17} />
+            Logout
+          </button>
+        </div>
+      </header>
+      <GlobalStatsChips places={places} />
+      {mode !== "admin" && <FiltersBar active={filters} onChange={setFilters} sort={sort} onSortChange={setSort} showSort={mode === "list"} />}
+      {locationError && <p className="absolute left-3 right-3 top-32 z-[800] rounded-md bg-coral p-2 text-sm font-semibold text-white">{locationError}</p>}
+      {notice && (
+        <div className="absolute left-3 right-3 top-32 z-[850] flex items-center justify-between gap-3 rounded-md bg-ink p-3 text-sm font-semibold text-white shadow-panel md:left-auto md:w-[420px]">
+          <span>{notice}</span>
+          <button onClick={() => setNotice(null)} className="rounded-md bg-white/15 px-2 py-1">Cerrar</button>
+        </div>
+      )}
+      <section className="relative h-[calc(100vh-11.2rem)] md:h-[calc(100vh-10.5rem)]">
+        {mode === "admin" ? (
+          <AdminPage places={places} profiles={profiles} refresh={refresh} />
+        ) : mode === "route" ? (
+          <MyRouteView places={places} profile={profile} userLocation={userLocation} onSelect={setDetailPlace} onUseLocation={requestLocation} />
+        ) : (
+          <div className="relative h-full md:grid md:grid-cols-[1fr_430px]">
+            <div className={`${mode === "list" ? "hidden md:block" : "block"} relative h-full pb-[34vh] md:pb-0`}>
+              <MapViewDynamic places={visiblePlaces} profileById={profileById} selectedPlace={previewPlace ?? detailPlace} userLocation={userLocation} onSelect={setPreviewPlace} />
+              <PlacePreviewCard place={previewPlace} onClose={() => setPreviewPlace(null)} onDetails={(place) => { setDetailPlace(place); setPreviewPlace(null); }} />
+              <MapLegend profiles={profiles} />
+              <NearbySuggestions places={places} userLocation={userLocation} onSelect={setPreviewPlace} />
+              <button onClick={requestLocation} className="absolute bottom-[calc(34vh+1rem)] right-4 z-[800] rounded-full bg-river p-4 text-white shadow-panel md:bottom-4" aria-label="Usar mi ubicacion">
+                <LocateFixed size={22} />
+              </button>
+            </div>
+            <div
+              className={`${mode === "map" ? "absolute inset-x-0 bottom-0 z-[760] h-[34vh] rounded-t-lg border-t border-black/10 shadow-panel md:static md:block md:h-full md:rounded-none md:border-l md:border-t-0 md:shadow-none" : "block h-full"} overflow-hidden bg-field`}
+              onTouchStart={(event) => setSheetTouchStart(event.touches[0].clientY)}
+              onTouchEnd={(event) => {
+                if (sheetTouchStart !== null && sheetTouchStart - event.changedTouches[0].clientY > 45) setMode("list");
+                setSheetTouchStart(null);
+              }}
+            >
+              {mode === "map" && (
+                <button onClick={() => setMode("list")} className="flex w-full items-center justify-center bg-white py-2 md:hidden" aria-label="Abrir lista">
+                  <span className="h-1.5 w-12 rounded-full bg-black/20" />
+                </button>
+              )}
+              <PlaceList places={visiblePlaces} profileById={profileById} userLocation={userLocation} selectedId={(previewPlace ?? detailPlace)?.id} onSelect={mode === "map" ? setPreviewPlace : setDetailPlace} />
+            </div>
+          </div>
+        )}
+        {mode !== "admin" && <PlaceDrawer place={detailPlace} currentProfile={profile} profileById={profileById} activity={activity} userLocation={userLocation} onClose={() => setDetailPlace(null)} />}
+      </section>
+    </main>
+  );
+}
