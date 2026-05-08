@@ -12,58 +12,67 @@ export function useAppData() {
   const [places, setPlaces] = useState<Place[]>([]);
   const [activity, setActivity] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (showLoading = false) => {
     setError(null);
-    const { data: sessionData } = await supabase.auth.getSession();
-    const currentUser = sessionData.session?.user ?? null;
-    setUser(currentUser);
+    if (showLoading) setLoading(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const currentUser = sessionData.session?.user ?? null;
 
-    if (!currentUser) {
-      setProfile(null);
-      setPlaces([]);
-      setProfiles([]);
-      setActivity([]);
+      if (!currentUser) {
+        setUser(null);
+        setProfile(null);
+        setPlaces([]);
+        setProfiles([]);
+        setActivity([]);
+        return;
+      }
+
+      const [profileResult, profilesResult, placesResult, legacyPlacesResult, activityResult] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", currentUser.id).maybeSingle(),
+        supabase.from("profiles").select("*").order("full_name"),
+        supabase
+          .from("places")
+          .select("*, opening_slots:place_opening_slots(*), assignments:place_assignments(*), photo_sessions:place_photo_sessions(*)")
+          .order("priority", { ascending: false })
+          .order("name"),
+        supabase
+          .from("places")
+          .select("*, opening_slots:place_opening_slots(*)")
+          .order("priority", { ascending: false })
+          .order("name"),
+        supabase.from("activity_log").select("*").order("created_at", { ascending: false }).limit(250)
+      ]);
+
+      if (profileResult.error) setError(profileResult.error.message);
+      if (!profileResult.error && !profileResult.data) setError("No se encontro un perfil activo para este usuario.");
+      setUser(currentUser);
+      setProfile((profileResult.data as Profile | null) ?? null);
+      setProfiles((profilesResult.data as Profile[]) ?? []);
+      if (placesResult.error && !legacyPlacesResult.error) {
+        setPlaces(((legacyPlacesResult.data as Place[]) ?? []).map((place) => ({ ...place, assignments: [], photo_sessions: [] })));
+      } else {
+        if (placesResult.error) setError(placesResult.error.message);
+        setPlaces((placesResult.data as Place[]) ?? []);
+      }
+      setActivity((activityResult.data as ActivityLog[]) ?? []);
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : "No se pudo cargar la app.");
+    } finally {
+      setInitialized(true);
       setLoading(false);
-      return;
     }
-
-    const [profileResult, profilesResult, placesResult, legacyPlacesResult, activityResult] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", currentUser.id).maybeSingle(),
-      supabase.from("profiles").select("*").order("full_name"),
-      supabase
-        .from("places")
-        .select("*, opening_slots:place_opening_slots(*), assignments:place_assignments(*), photo_sessions:place_photo_sessions(*)")
-        .order("priority", { ascending: false })
-        .order("name"),
-      supabase
-        .from("places")
-        .select("*, opening_slots:place_opening_slots(*)")
-        .order("priority", { ascending: false })
-        .order("name"),
-      supabase.from("activity_log").select("*").order("created_at", { ascending: false }).limit(250)
-    ]);
-
-    if (profileResult.error) setError(profileResult.error.message);
-    setProfile((profileResult.data as Profile | null) ?? null);
-    setProfiles((profilesResult.data as Profile[]) ?? []);
-    if (placesResult.error && !legacyPlacesResult.error) {
-      setPlaces(((legacyPlacesResult.data as Place[]) ?? []).map((place) => ({ ...place, assignments: [], photo_sessions: [] })));
-    } else {
-      if (placesResult.error) setError(placesResult.error.message);
-      setPlaces((placesResult.data as Place[]) ?? []);
-    }
-    setActivity((activityResult.data as ActivityLog[]) ?? []);
-    setLoading(false);
   }, []);
 
   useEffect(() => {
-    void refresh();
+    void refresh(true);
     const {
       data: { subscription }
     } = supabase.auth.onAuthStateChange(() => {
-      void refresh();
+      void refresh(true);
     });
     return () => subscription.unsubscribe();
   }, [refresh]);
@@ -108,6 +117,7 @@ export function useAppData() {
     setPlaces,
     activity,
     loading,
+    initialized,
     error,
     refresh
   };

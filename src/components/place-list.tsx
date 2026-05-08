@@ -4,7 +4,13 @@ import { SearchX } from "lucide-react";
 
 import type { LocationPoint, Place, Priority, Profile } from "@/types";
 import { AssignmentNoticeChip, CoverageChips, PriorityBadge, StatusBadge } from "./badges";
-import { calculateDistance, closesSoon, formatDistance, todayHours } from "@/lib/place-utils";
+import { calculateDistance, closesSoon, formatDistance, getScheduleChips, type ScheduleChipTone } from "@/lib/place-utils";
+
+const scheduleChipClass: Record<ScheduleChipTone, string> = {
+  open: "border-river/20 bg-river/10 text-river",
+  closed: "border-black/10 bg-mist text-ink/60",
+  skipped: "border-coral/20 bg-coral/10 text-coral"
+};
 
 export function PlaceList({
   places,
@@ -28,6 +34,7 @@ export function PlaceList({
     <div className="h-full overflow-y-auto bg-field">
       {places.map((place) => {
         const distance = userLocation ? calculateDistance(userLocation.lat, userLocation.lng, place.lat, place.lng) : null;
+        const scheduleChips = getScheduleChips(place);
         return (
           <div
             key={place.id}
@@ -67,8 +74,12 @@ export function PlaceList({
               )}
               <CoverageChips place={place} profileById={profileById} showEmpty />
             </div>
-            <div className="mt-2 flex items-center gap-2 text-xs font-semibold text-ink/60">
-              <span>{todayHours(place)}</span>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {scheduleChips.map((chip) => (
+                <span key={chip.label} className={`rounded-full border px-2 py-0.5 text-xs font-extrabold ${scheduleChipClass[chip.tone]}`}>
+                  {chip.label}
+                </span>
+              ))}
               {closesSoon(place) && <span className="rounded-full bg-coral px-2 py-0.5 text-white">Cierra pronto</span>}
             </div>
           </div>

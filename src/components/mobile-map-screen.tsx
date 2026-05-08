@@ -22,9 +22,9 @@ type SheetMode = "list" | "detail" | "search" | "filters" | "route" | "stats" | 
 
 const sortChips: { key: SortKey; label: string }[] = [
   { key: "recommended", label: "Recomendado" },
-  { key: "place_number", label: "Numero" },
+  { key: "place_number", label: "Número" },
   { key: "priority", label: "Prioridad" },
-  { key: "distance", label: "Cercania" }
+  { key: "distance", label: "Cercanía" }
 ];
 
 const NAV_HEIGHT = 78;
@@ -63,6 +63,46 @@ function ListSortChips({
   );
 }
 
+function ListSearchControl({
+  value,
+  onChange,
+  onFocusList
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onFocusList: () => void;
+}) {
+  return (
+    <div className="w-full">
+      <div className="flex min-h-11 items-center gap-2 rounded-full bg-field px-3 ring-1 ring-black/10">
+        <Search size={18} className="shrink-0 text-ink/55" aria-hidden="true" />
+        <input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onFocus={onFocusList}
+          className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-ink outline-none placeholder:text-ink/40"
+          placeholder="Buscar lugar o direccion"
+          aria-label="Buscar lugares"
+        />
+        {value && (
+          <button
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onChange("");
+            }}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-ink/65"
+            aria-label="Limpiar busqueda"
+            type="button"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function MobileMapScreen({
   places,
   visiblePlaces,
@@ -71,6 +111,7 @@ export function MobileMapScreen({
   profileById,
   activity,
   filters,
+  photographerFilters,
   sort,
   searchQuery,
   selectedPlace,
@@ -78,6 +119,7 @@ export function MobileMapScreen({
   locationError,
   notice,
   onFiltersChange,
+  onPhotographerFiltersChange,
   onSortChange,
   onSearchChange,
   onSelectPlace,
@@ -94,6 +136,7 @@ export function MobileMapScreen({
   profileById: Map<string, Profile>;
   activity: ActivityLog[];
   filters: Set<FilterKey>;
+  photographerFilters: Set<string>;
   sort: SortKey;
   searchQuery: string;
   selectedPlace: Place | null;
@@ -101,6 +144,7 @@ export function MobileMapScreen({
   locationError?: string | null;
   notice?: string | null;
   onFiltersChange: (next: Set<FilterKey>) => void;
+  onPhotographerFiltersChange: (next: Set<string>) => void;
   onSortChange: (sort: SortKey) => void;
   onSearchChange: (value: string) => void;
   onSelectPlace: (place: Place) => void;
@@ -185,8 +229,9 @@ export function MobileMapScreen({
   }
 
   function openSearch() {
-    setSheetMode("search");
-    setBottomSheetState("partial");
+    setActiveTab("list");
+    setSheetMode("list");
+    setBottomSheetState("expanded");
   }
 
   return (
@@ -202,7 +247,7 @@ export function MobileMapScreen({
       />
 
       <div className="pointer-events-none fixed inset-x-0 top-0 z-[820] px-3 pt-[calc(env(safe-area-inset-top)+0.5rem)]">
-        <QuickFilterChips active={filters} onChange={onFiltersChange} />
+        <QuickFilterChips active={filters} photographerFilters={photographerFilters} onChange={onFiltersChange} onOpenAdvanced={openFilters} />
       </div>
 
       {(locationError || notice) && (
@@ -230,7 +275,14 @@ export function MobileMapScreen({
         title={sheetTitle}
         summary={sheetSummary}
         badge={isListSheet ? `${pendingPlacesCount} pendientes` : undefined}
-        headerActions={isListSheet ? <ListSortChips active={sort} userLocation={userLocation} onChange={onSortChange} /> : undefined}
+        headerActions={
+          isListSheet ? (
+            <div className="space-y-2">
+              <ListSearchControl value={searchQuery} onChange={onSearchChange} onFocusList={() => openList("expanded")} />
+              <ListSortChips active={sort} userLocation={userLocation} onChange={onSortChange} />
+            </div>
+          ) : undefined
+        }
       >
         {sheetMode === "detail" && selectedPlace ? (
           <PlaceDetailSheetContent
@@ -270,8 +322,26 @@ export function MobileMapScreen({
           </div>
         ) : sheetMode === "filters" ? (
           <div className="space-y-3">
-            <FiltersBar active={filters} onChange={onFiltersChange} sort={sort} onSortChange={onSortChange} showSort />
-            <PlacesPreview places={visiblePlaces} profileById={profileById} currentProfile={profile} userLocation={userLocation} selectedId={selectedPlace?.id} onSelect={selectPlace} />
+            <FiltersBar
+              active={filters}
+              onChange={onFiltersChange}
+              sort={sort}
+              onSortChange={onSortChange}
+              profiles={profiles}
+              photographerFilters={photographerFilters}
+              onPhotographerFiltersChange={onPhotographerFiltersChange}
+              showHeader={false}
+              showSort
+            />
+            <PlaceList
+              places={visiblePlaces}
+              profileById={profileById}
+              currentProfile={profile}
+              userLocation={userLocation}
+              selectedId={selectedPlace?.id}
+              onSelect={selectPlace}
+              onChangePriority={onChangePriority}
+            />
           </div>
         ) : sheetMode === "route" ? (
           <MyRouteView places={places} profile={profile} profileById={profileById} userLocation={userLocation} onSelect={selectPlace} onUseLocation={onUseLocation} />

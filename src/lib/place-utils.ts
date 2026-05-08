@@ -2,6 +2,8 @@ import type { FilterKey, LocationPoint, OpeningDay, OpeningPeriod, OpeningSlot, 
 import { statusColors } from "./labels";
 
 const priorityWeight: Record<Priority, number> = { high: 3, medium: 2, low: 1 };
+export type ScheduleChipTone = "open" | "closed" | "skipped";
+export type ScheduleChip = { label: string; tone: ScheduleChipTone };
 
 export function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
   const earthRadius = 6371000;
@@ -66,6 +68,37 @@ export function isOpenOnSaturday(place: Place) {
 
 export function isOpenOnSunday(place: Place) {
   return isOpenOnDay(getOpeningSlots(place), "sunday");
+}
+
+function getDayScheduleLabel(
+  slots: OpeningSlot[],
+  day: OpeningDay,
+  labels: { full: string; morning: string; afternoon: string }
+) {
+  const daySlots = slots.filter((slot) => slot.day_of_week === day);
+  if (!daySlots.length) return null;
+  const hasMorning = daySlots.some((slot) => slot.period === "morning");
+  const hasAfternoon = daySlots.some((slot) => slot.period === "afternoon");
+  const hasCustom = daySlots.some((slot) => slot.period === "custom");
+  if (hasMorning && !hasAfternoon && !hasCustom) return labels.morning;
+  if (hasAfternoon && !hasMorning && !hasCustom) return labels.afternoon;
+  return labels.full;
+}
+
+export function getScheduleChips(place: Place): ScheduleChip[] {
+  if (place.status === "skipped") return [{ label: "Descartado", tone: "skipped" }];
+
+  const slots = getOpeningSlots(place);
+  if (!slots.length) return [{ label: "Cerrado", tone: "closed" }];
+
+  const chips = [
+    getDayScheduleLabel(slots, "saturday", { full: "Sábado", morning: "Sábado mañana", afternoon: "Sábado tarde" }),
+    getDayScheduleLabel(slots, "sunday", { full: "Domingo", morning: "Domingo mañana", afternoon: "Domingo tarde" })
+  ]
+    .filter((label): label is string => Boolean(label))
+    .map((label) => ({ label, tone: "open" as const }));
+
+  return chips.length ? chips : [{ label: "Cerrado", tone: "closed" }];
 }
 
 function timeToMinutes(value: string | null) {
@@ -189,22 +222,57 @@ export function filterPlaces(
   userLocation?: LocationPoint | null
 ) {
   if (filters.has("all") || filters.size === 0) return places;
+  const statusFilters: FilterKey[] = ["pending", "unassigned", "assigned", "mine", "assigned_other", "in_progress", "completed", "issue", "skipped"];
+  const priorityFilters: FilterKey[] = ["high", "medium", "low"];
+  const scheduleFilters: FilterKey[] = ["saturday", "sunday", "saturday_morning", "saturday_afternoon", "sunday_morning", "sunday_afternoon"];
+  const activeStatusFilters = statusFilters.filter((filter) => filters.has(filter));
+  const activePriorityFilters = priorityFilters.filter((filter) => filters.has(filter));
+  const activeScheduleFilters = scheduleFilters.filter((filter) => filters.has(filter));
+
   return places.filter((place) => {
-    if (filters.has("pending") && place.status !== "pending") return false;
-    if (filters.has("unassigned") && hasActiveAssignments(place)) return false;
-    if (filters.has("assigned") && place.status !== "assigned") return false;
-    if (filters.has("mine") && !isAssignedToProfile(place, userId)) return false;
-    if (filters.has("in_progress") && place.status !== "in_progress") return false;
-    if (filters.has("completed") && !isPlaceFullyCompleted(place)) return false;
-    if (filters.has("issue") && place.status !== "issue") return false;
-    if (filters.has("high") && place.priority !== "high") return false;
+    if (
+      activeStatusFilters.length &&
+      !activeStatusFilters.some((filter) => {
+        if (filter === "pending") return place.status === "pending";
+        if (filter === "unassigned") return !hasActiveAssignments(place);
+        if (filter === "assigned") return hasActiveAssignments(place);
+        if (filter === "mine") return isAssignedToProfile(place, userId);
+        if (filter === "assigned_other") return isAssignedToAnotherProfile(place, userId);
+        if (filter === "in_progress") return place.status === "in_progress";
+        if (filter === "completed") return isPlaceFullyCompleted(place);
+        if (filter === "issue") return place.status === "issue";
+        if (filter === "skipped") return place.status === "skipped";
+        return false;
+      })
+    ) {
+      return false;
+    }
+    if (
+      activePriorityFilters.length &&
+      !activePriorityFilters.some((filter) => {
+        if (filter === "high") return place.priority === "high";
+        if (filter === "medium") return place.priority === "medium";
+        if (filter === "low") return place.priority === "low";
+        return false;
+      })
+    ) {
+      return false;
+    }
     const slots = getOpeningSlots(place);
-    if (filters.has("saturday") && !isOpenOnDay(slots, "saturday")) return false;
-    if (filters.has("sunday") && !isOpenOnDay(slots, "sunday")) return false;
-    if (filters.has("saturday_morning") && !isOpenInPeriod(slots, "saturday", "morning")) return false;
-    if (filters.has("saturday_afternoon") && !isOpenInPeriod(slots, "saturday", "afternoon")) return false;
-    if (filters.has("sunday_morning") && !isOpenInPeriod(slots, "sunday", "morning")) return false;
-    if (filters.has("sunday_afternoon") && !isOpenInPeriod(slots, "sunday", "afternoon")) return false;
+    if (
+      activeScheduleFilters.length &&
+      !activeScheduleFilters.some((filter) => {
+        if (filter === "saturday") return isOpenOnDay(slots, "saturday");
+        if (filter === "sunday") return isOpenOnDay(slots, "sunday");
+        if (filter === "saturday_morning") return isOpenInPeriod(slots, "saturday", "morning");
+        if (filter === "saturday_afternoon") return isOpenInPeriod(slots, "saturday", "afternoon");
+        if (filter === "sunday_morning") return isOpenInPeriod(slots, "sunday", "morning");
+        if (filter === "sunday_afternoon") return isOpenInPeriod(slots, "sunday", "afternoon");
+        return false;
+      })
+    ) {
+      return false;
+    }
     if (filters.has("open_now") && !isOpenNow(slots)) return false;
     if (filters.has("closing") && !closesSoon(place)) return false;
     if (filters.has("nearby")) {

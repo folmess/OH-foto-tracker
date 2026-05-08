@@ -40,12 +40,12 @@ export function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#0f351b] via-[#153d22] to-[#1a5c2e] p-5">
       {loading && !useMagicLink && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-field p-5">
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#9068a5] p-5">
           <div className="flex animate-pulse flex-col items-center">
-            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-[#9068a5]/10 shadow-inner ring-1 ring-[#9068a5]/20">
-              <Image src="/OHLOGO.avif" alt="Open House Rosario" width={58} height={58} priority className="h-14 w-14 object-contain grayscale" />
+            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-white/15 shadow-inner ring-1 ring-white/25">
+              <Image src="/OHLOGO.avif" alt="Open House Rosario" width={58} height={58} priority className="h-14 w-14 object-contain grayscale brightness-0 invert" />
             </div>
-            <p className="mt-4 text-sm font-bold tracking-wide text-[#9068a5]">Cargando OH Foto Tracker</p>
+            <p className="mt-4 text-sm font-bold tracking-wide text-white">Cargando OH Foto Tracker</p>
           </div>
         </div>
       )}

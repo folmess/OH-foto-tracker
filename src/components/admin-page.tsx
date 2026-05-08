@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import Papa from "papaparse";
 import type { City, OpeningSlot, Place, Priority, Profile, Role } from "@/types";
 import { supabase } from "@/lib/supabase";
-import { StatsPanel } from "./stats-panel";
 import { CoverageChips, StatusBadge, PriorityBadge, PhotographerBadge } from "./badges";
 import { AddressGeocoder } from "./address-geocoder";
 import { MiniMapPicker } from "./mini-map-picker";
@@ -265,10 +264,9 @@ export function AdminPage({ places, profiles, refresh }: { places: Place[]; prof
       <div className="mx-auto max-w-6xl space-y-6">
         <section>
           <h2 className="text-2xl font-bold">Admin</h2>
-          <p className="text-sm text-ink/60">Importacion, fotografos, lugares y estadisticas basicas.</p>
+          <p className="text-sm text-ink/60">Importacion, fotografos y lugares.</p>
         </section>
         {message && <p className="rounded-md bg-mist p-3 text-sm font-semibold">{message}</p>}
-        <StatsPanel places={places} profiles={profiles} />
         <section className="rounded-lg bg-white p-4 shadow-sm">
           <h3 className="font-bold">Crear o editar lugar</h3>
           <form onSubmit={savePlace} className="mt-3 grid gap-2 md:grid-cols-6">

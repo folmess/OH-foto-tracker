@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import type { BottomSheetState } from "@/types";
 
 const NAV_HEIGHT = 78;
@@ -10,6 +10,10 @@ const TOP_MARGIN = 92;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function isInteractiveTarget(target: EventTarget | null) {
+  return target instanceof HTMLElement && Boolean(target.closest("a, button, input, select, textarea, [data-no-sheet-drag='true']"));
 }
 
 export function BottomSheetHandle() {
@@ -36,6 +40,7 @@ export function BottomSheetScaffold({
   const [viewportHeight, setViewportHeight] = useState(720);
   const [dragOffset, setDragOffset] = useState<number | null>(null);
   const dragStart = useRef<{ y: number; visibleHeight: number } | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const update = () => setViewportHeight(window.innerHeight);
@@ -72,7 +77,22 @@ export function BottomSheetScaffold({
     onStateChange(closest);
   }
 
+  function startDrag(event: ReactPointerEvent<HTMLElement>) {
+    if (isInteractiveTarget(event.target)) return;
+    if (state === "expanded" && contentRef.current?.contains(event.target as Node)) return;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    dragStart.current = { y: event.clientY, visibleHeight: snapHeights[state] };
+    setDragOffset(snapHeights[state]);
+  }
+
+  function moveDrag(event: ReactPointerEvent<HTMLElement>) {
+    if (!dragStart.current) return;
+    const delta = dragStart.current.y - event.clientY;
+    setDragOffset(clamp(dragStart.current.visibleHeight + delta, snapHeights.collapsed, snapHeights.expanded));
+  }
+
   const transitionDuration = state === "collapsed" || dragOffset !== null ? "200ms" : "300ms";
+  const contentCanScroll = state === "expanded" && dragOffset === null;
 
   return (
     <section
@@ -82,24 +102,16 @@ export function BottomSheetScaffold({
         height: sheetHeight,
         transform: `translate3d(0, ${translateY}px, 0)`,
         transition: dragOffset === null ? `transform ${transitionDuration} cubic-bezier(.2,.8,.2,1)` : "none",
-        touchAction: "none"
+        touchAction: contentCanScroll ? "pan-y" : "none"
       }}
       aria-label={title ?? undefined}
+      onPointerDown={startDrag}
+      onPointerMove={moveDrag}
+      onPointerUp={finishDrag}
+      onPointerCancel={finishDrag}
     >
       <div
-        className="shrink-0 cursor-grab touch-none rounded-t-[28px] bg-white px-4 pb-2 pt-3 active:cursor-grabbing"
-        onPointerDown={(event) => {
-          (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-          dragStart.current = { y: event.clientY, visibleHeight: snapHeights[state] };
-          setDragOffset(snapHeights[state]);
-        }}
-        onPointerMove={(event) => {
-          if (!dragStart.current) return;
-          const delta = dragStart.current.y - event.clientY;
-          setDragOffset(clamp(dragStart.current.visibleHeight + delta, snapHeights.collapsed, snapHeights.expanded));
-        }}
-        onPointerUp={finishDrag}
-        onPointerCancel={finishDrag}
+        className="shrink-0 cursor-grab rounded-t-[28px] bg-white px-4 pb-2 pt-3 active:cursor-grabbing"
       >
         <div className="flex justify-center py-1">
           <BottomSheetHandle />
@@ -121,13 +133,17 @@ export function BottomSheetScaffold({
             </button>
           )}
           {headerActions && (
-            <div className={`flex items-center justify-end ${!(title || badge) ? "mb-2" : ""}`}>
+            <div className={`block w-full ${!(title || badge) ? "mb-2" : ""}`}>
               {headerActions}
             </div>
           )}
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4" style={{ WebkitOverflowScrolling: "touch" }}>
+      <div
+        ref={contentRef}
+        className={`min-h-0 flex-1 overscroll-contain pb-4 ${contentCanScroll ? "overflow-y-auto" : "overflow-hidden"}`}
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
         {children}
       </div>
     </section>

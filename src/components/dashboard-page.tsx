@@ -21,9 +21,10 @@ import { PlacePreviewCard } from "./place-preview-card";
 import { MobileMapScreen } from "./mobile-map-screen";
 
 export function DashboardPage() {
-  const { user, profile, profiles, profileById, places, activity, loading, error, refresh } = useAppData();
+  const { user, profile, profiles, profileById, places, activity, loading, initialized, error, refresh } = useAppData();
   const [mode, setMode] = useState<"map" | "list" | "route" | "admin">("map");
   const [filters, setFilters] = useState<Set<FilterKey>>(new Set(["all"]));
+  const [photographerFilters, setPhotographerFilters] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<SortKey>("priority");
   const [searchQuery, setSearchQuery] = useState("");
   const [previewPlace, setPreviewPlace] = useState<Place | null>(null);
@@ -36,8 +37,10 @@ export function DashboardPage() {
 
   useEffect(() => {
     const savedFilters = window.localStorage.getItem("tracker.filters");
+    const savedPhotographerFilters = window.localStorage.getItem("tracker.photographerFilters");
     const savedSort = window.localStorage.getItem("tracker.sort") as SortKey | null;
     if (savedFilters) setFilters(new Set(savedFilters.split(",") as FilterKey[]));
+    if (savedPhotographerFilters) setPhotographerFilters(new Set(savedPhotographerFilters.split(",").filter(Boolean)));
     if (savedSort) setSort(savedSort);
   }, []);
 
@@ -51,8 +54,9 @@ export function DashboardPage() {
 
   useEffect(() => {
     window.localStorage.setItem("tracker.filters", Array.from(filters).join(","));
+    window.localStorage.setItem("tracker.photographerFilters", Array.from(photographerFilters).join(","));
     window.localStorage.setItem("tracker.sort", sort);
-  }, [filters, sort]);
+  }, [filters, photographerFilters, sort]);
 
   useEffect(() => {
     if (!locationError) return;
@@ -62,16 +66,19 @@ export function DashboardPage() {
 
   const visiblePlaces = useMemo(() => {
     const filtered = filterPlaces(places, filters, profile?.id, userLocation);
+    const byPhotographer = photographerFilters.size
+      ? filtered.filter((place) => getActiveAssignments(place).some((assignment) => photographerFilters.has(assignment.photographer_id)))
+      : filtered;
     const query = searchQuery.trim().toLocaleLowerCase("es-AR");
     const searched = query
-      ? filtered.filter((place) =>
+      ? byPhotographer.filter((place) =>
           [place.name, place.place_number, place.full_address, place.address, place.neighborhood, place.city]
             .filter(Boolean)
             .some((value) => String(value).toLocaleLowerCase("es-AR").includes(query))
         )
-      : filtered;
+      : byPhotographer;
     return sortPlaces(searched, sort, userLocation);
-  }, [places, filters, profile?.id, searchQuery, sort, userLocation]);
+  }, [places, filters, photographerFilters, profile?.id, searchQuery, sort, userLocation]);
 
   useEffect(() => {
     if (!detailPlace) return;
@@ -131,22 +138,24 @@ export function DashboardPage() {
     await refresh();
   }
 
-  if (loading) {
-    return (
-      <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-field p-5">
-        <div className="flex animate-pulse flex-col items-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-[#9068a5]/10 shadow-inner ring-1 ring-[#9068a5]/20">
-            <Image src="/OHLOGO.avif" alt="Open House Rosario" width={58} height={58} priority className="h-14 w-14 object-contain grayscale" />
-          </div>
-          <p className="mt-4 text-sm font-bold tracking-wide text-[#9068a5]">Cargando OH Foto Tracker</p>
+  const loadingScreen = (
+    <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#9068a5] p-5">
+      <div className="flex animate-pulse flex-col items-center">
+        <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-white/15 shadow-inner ring-1 ring-white/25">
+          <Image src="/OHLOGO.avif" alt="Open House Rosario" width={58} height={58} priority className="h-14 w-14 object-contain grayscale brightness-0 invert" />
         </div>
-      </main>
-    );
+        <p className="mt-4 text-sm font-bold tracking-wide text-white">Cargando OH Foto Tracker</p>
+      </div>
+    </main>
+  );
+
+  if (loading || !initialized) {
+    return loadingScreen;
   }
   if (!user) return <LoginPage />;
   if (!profile) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-field p-5">
+      <main className="flex min-h-screen items-center justify-center bg-[#9068a5] p-5">
         <div className="max-w-sm rounded-lg bg-white p-5 shadow-panel">
           <h1 className="text-xl font-bold">Acceso no autorizado</h1>
           <p className="mt-2 text-sm text-ink/65">Tu usuario no tiene un profile activo. Pedile a un admin que cree o active tu perfil.</p>
@@ -167,6 +176,7 @@ export function DashboardPage() {
         profileById={profileById}
         activity={activity}
         filters={filters}
+        photographerFilters={photographerFilters}
         sort={sort}
         searchQuery={searchQuery}
         selectedPlace={detailPlace}
@@ -174,6 +184,7 @@ export function DashboardPage() {
         locationError={locationError}
         notice={notice}
         onFiltersChange={setFilters}
+        onPhotographerFiltersChange={setPhotographerFilters}
         onSortChange={setSort}
         onSearchChange={setSearchQuery}
         onSelectPlace={(place) => {
@@ -218,7 +229,18 @@ export function DashboardPage() {
         </div>
       </header>
       <GlobalStatsChips places={places} />
-      {mode !== "admin" && <FiltersBar active={filters} onChange={setFilters} sort={sort} onSortChange={setSort} showSort={mode === "list"} />}
+      {mode !== "admin" && (
+        <FiltersBar
+          active={filters}
+          onChange={setFilters}
+          sort={sort}
+          onSortChange={setSort}
+          profiles={profiles}
+          photographerFilters={photographerFilters}
+          onPhotographerFiltersChange={setPhotographerFilters}
+          showSort={mode === "list"}
+        />
+      )}
       {locationError && <p className="absolute left-3 right-3 top-32 z-[800] rounded-md bg-coral p-2 text-sm font-semibold text-white">{locationError}</p>}
       {notice && (
         <div className="absolute left-3 right-3 top-32 z-[850] flex items-center justify-between gap-3 rounded-md bg-ink p-3 text-sm font-semibold text-white shadow-panel md:left-auto md:w-[420px]">
