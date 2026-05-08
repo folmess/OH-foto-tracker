@@ -29,17 +29,31 @@ export function useAppData() {
       return;
     }
 
-    const [profileResult, profilesResult, placesResult, activityResult] = await Promise.all([
+    const [profileResult, profilesResult, placesResult, legacyPlacesResult, activityResult] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", currentUser.id).maybeSingle(),
       supabase.from("profiles").select("*").order("full_name"),
-      supabase.from("places").select("*, opening_slots:place_opening_slots(*)").order("priority", { ascending: false }).order("name"),
+      supabase
+        .from("places")
+        .select("*, opening_slots:place_opening_slots(*), assignments:place_assignments(*), photo_sessions:place_photo_sessions(*)")
+        .order("priority", { ascending: false })
+        .order("name"),
+      supabase
+        .from("places")
+        .select("*, opening_slots:place_opening_slots(*)")
+        .order("priority", { ascending: false })
+        .order("name"),
       supabase.from("activity_log").select("*").order("created_at", { ascending: false }).limit(250)
     ]);
 
     if (profileResult.error) setError(profileResult.error.message);
     setProfile((profileResult.data as Profile | null) ?? null);
     setProfiles((profilesResult.data as Profile[]) ?? []);
-    setPlaces((placesResult.data as Place[]) ?? []);
+    if (placesResult.error && !legacyPlacesResult.error) {
+      setPlaces(((legacyPlacesResult.data as Place[]) ?? []).map((place) => ({ ...place, assignments: [], photo_sessions: [] })));
+    } else {
+      if (placesResult.error) setError(placesResult.error.message);
+      setPlaces((placesResult.data as Place[]) ?? []);
+    }
     setActivity((activityResult.data as ActivityLog[]) ?? []);
     setLoading(false);
   }, []);
@@ -59,17 +73,22 @@ export function useAppData() {
     const channel = supabase
       .channel("tracker-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "places" }, (payload) => {
-        setPlaces((current) => {
-          if (payload.eventType === "DELETE") return current.filter((place) => place.id !== (payload.old as Place).id);
-          const nextPlace = payload.new as Place;
-          const exists = current.some((place) => place.id === nextPlace.id);
-          return exists ? current.map((place) => (place.id === nextPlace.id ? nextPlace : place)) : [nextPlace, ...current];
-        });
+        if (payload.eventType === "DELETE") {
+          setPlaces((current) => current.filter((place) => place.id !== (payload.old as Place).id));
+          return;
+        }
+        void refresh();
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "activity_log" }, (payload) => {
         setActivity((current) => [payload.new as ActivityLog, ...current].slice(0, 250));
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "place_opening_slots" }, () => {
+        void refresh();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "place_assignments" }, () => {
+        void refresh();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "place_photo_sessions" }, () => {
         void refresh();
       })
       .subscribe();

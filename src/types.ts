@@ -1,5 +1,6 @@
 export type Role = "admin" | "photographer";
 export type PlaceStatus = "pending" | "assigned" | "in_progress" | "completed" | "issue" | "skipped";
+export type AssignmentStatus = "assigned" | "in_progress" | "completed" | "cancelled";
 export type Priority = "low" | "medium" | "high";
 export type City = "Rosario" | "Funes";
 export type OpeningDay = "saturday" | "sunday";
@@ -41,6 +42,35 @@ export type Place = {
   created_at: string;
   updated_at: string;
   opening_slots?: OpeningSlot[];
+  assignments?: PlaceAssignment[];
+  photo_sessions?: PlacePhotoSession[];
+};
+
+export type PlaceAssignment = {
+  id: string;
+  place_id: string;
+  photographer_id: string;
+  status: AssignmentStatus;
+  note: string | null;
+  assigned_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlacePhotoSession = {
+  id: string;
+  place_id: string;
+  photographer_id: string;
+  assignment_id: string | null;
+  note: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  photographed_at: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type OpeningSlot = {

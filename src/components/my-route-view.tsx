@@ -1,18 +1,20 @@
 "use client";
 
 import type { LocationPoint, Place, Profile } from "@/types";
-import { calculateDistance, closesSoon, formatDistance, sortPlacesByDistance, todayHours } from "@/lib/place-utils";
-import { PriorityBadge, StatusBadge } from "./badges";
+import { calculateDistance, closesSoon, formatDistance, isAssignedToProfile, sortPlacesByDistance, todayHours } from "@/lib/place-utils";
+import { CoverageChips, PriorityBadge, StatusBadge } from "./badges";
 
 function RouteSection({
   title,
   places,
   userLocation,
+  profileById,
   onSelect
 }: {
   title: string;
   places: Place[];
   userLocation?: LocationPoint | null;
+  profileById: Map<string, Profile>;
   onSelect: (place: Place) => void;
 }) {
   return (
@@ -33,6 +35,7 @@ function RouteSection({
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <StatusBadge status={place.status} />
                 <PriorityBadge priority={place.priority} />
+                <CoverageChips place={place} profileById={profileById} />
                 <span className="text-xs font-semibold text-ink/60">{todayHours(place)}</span>
                 {closesSoon(place) && <span className="rounded-full bg-coral px-2 py-1 text-xs font-bold text-white">Cierra pronto</span>}
               </div>
@@ -49,17 +52,19 @@ export function MyRouteView({
   places,
   profile,
   userLocation,
+  profileById,
   onSelect,
   onUseLocation
 }: {
   places: Place[];
   profile: Profile;
   userLocation?: LocationPoint | null;
+  profileById: Map<string, Profile>;
   onSelect: (place: Place) => void;
   onUseLocation: () => void;
 }) {
   const activeStatuses = new Set(["pending", "assigned", "in_progress", "issue"]);
-  const assignedToMe = places.filter((place) => place.assigned_photographer_id === profile.id && place.status !== "completed" && place.status !== "skipped");
+  const assignedToMe = places.filter((place) => isAssignedToProfile(place, profile.id) && place.status !== "completed" && place.status !== "skipped");
   const pending = places.filter((place) => activeStatuses.has(place.status) && place.status !== "completed" && place.status !== "skipped");
   const nearbyPending = userLocation ? sortPlacesByDistance(pending, userLocation).filter((place) => calculateDistance(userLocation.lat, userLocation.lng, place.lat, place.lng) <= 1000) : [];
   const highPriorityNearby = nearbyPending.filter((place) => place.priority === "high");
@@ -78,10 +83,10 @@ export function MyRouteView({
             </p>
           )}
         </section>
-        <RouteSection title="Recomendados ahora" places={recommended} userLocation={userLocation} onSelect={onSelect} />
-        <RouteSection title="Asignados a mi" places={userLocation ? sortPlacesByDistance(assignedToMe, userLocation) : assignedToMe} userLocation={userLocation} onSelect={onSelect} />
-        <RouteSection title="Pendientes cercanos" places={nearbyPending} userLocation={userLocation} onSelect={onSelect} />
-        <RouteSection title="Alta prioridad cerca" places={highPriorityNearby} userLocation={userLocation} onSelect={onSelect} />
+        <RouteSection title="Recomendados ahora" places={recommended} userLocation={userLocation} profileById={profileById} onSelect={onSelect} />
+        <RouteSection title="Asignados a mi" places={userLocation ? sortPlacesByDistance(assignedToMe, userLocation) : assignedToMe} userLocation={userLocation} profileById={profileById} onSelect={onSelect} />
+        <RouteSection title="Pendientes cercanos" places={nearbyPending} userLocation={userLocation} profileById={profileById} onSelect={onSelect} />
+        <RouteSection title="Alta prioridad cerca" places={highPriorityNearby} userLocation={userLocation} profileById={profileById} onSelect={onSelect} />
       </div>
     </div>
   );

@@ -2,17 +2,19 @@
 
 import type { LocationPoint, Place, Profile } from "@/types";
 import { calculateDistance, formatDistance, todayHours } from "@/lib/place-utils";
-import { PriorityBadge, StatusBadge } from "./badges";
+import { AssignmentNoticeChip, CoverageChips, PriorityBadge, StatusBadge } from "./badges";
 
 export function PlacesPreview({
   places,
   profileById,
+  currentProfile,
   userLocation,
   selectedId,
   onSelect
 }: {
   places: Place[];
   profileById: Map<string, Profile>;
+  currentProfile?: Profile;
   userLocation?: LocationPoint | null;
   selectedId?: string | null;
   onSelect: (place: Place) => void;
@@ -22,7 +24,6 @@ export function PlacesPreview({
     <div className="space-y-1.5 px-4">
       {preview.map((place) => {
         const distance = userLocation ? calculateDistance(userLocation.lat, userLocation.lng, place.lat, place.lng) : null;
-        const photographer = place.assigned_photographer_id ? profileById.get(place.assigned_photographer_id)?.full_name : null;
         return (
           <button
             key={place.id}
@@ -40,9 +41,10 @@ export function PlacesPreview({
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <StatusBadge status={place.status} />
+              <AssignmentNoticeChip place={place} currentProfileId={currentProfile?.id} />
               <PriorityBadge priority={place.priority} />
               <span className="text-xs font-bold text-ink/55">{todayHours(place)}</span>
-              {photographer && <span className="text-xs font-bold text-ink/55">{photographer}</span>}
+              <CoverageChips place={place} profileById={profileById} />
             </div>
           </button>
         );

@@ -63,6 +63,8 @@ El geocoding actual usa Nominatim/OpenStreetMap desde `/api/geocode` y no necesi
 3. Ejecutar migraciones SQL en orden desde `supabase/migrations`:
    - `0001_initial_schema.sql`
    - `0002_admin_geocoding_opening_slots.sql`
+   - `0003_multiple_assignments_photo_sessions.sql`
+   - `0004_admins_are_assignable_photographers.sql`
 4. Verificar que Row Level Security quede activo.
 5. Crear usuarios en Supabase Auth.
 6. Crear un `profile` para cada usuario con el mismo UUID de `auth.users.id`.
@@ -188,6 +190,14 @@ La direccion final tiene este formato:
 ```text
 Balcarce 17, Rosario, Santa Fe, Argentina
 ```
+
+## Asignaciones Y Sesiones
+
+- Un lugar puede tener varias asignaciones activas de distintos fotografos.
+- Un usuario admin tambien puede ser asignado y fotografiar; `admin` significa `admin + fotografo`.
+- Marcar `Fotografiado` crea una nueva sesion fotografica; no pisa sesiones anteriores.
+- Si un lugar ya tiene sesiones pero todavia quedan asignaciones activas, sigue apareciendo como pendiente/asignado con chip `Ya fotografiado`.
+- El porcentaje completado cuenta lugares cerrados, mientras que las estadisticas de sesiones cuentan cada visita fotografica.
 
 ## Notas De Seguridad
 

@@ -266,15 +266,15 @@ export function MobileMapScreen({
                 </button>
               )}
             </div>
-            <PlacesPreview places={visiblePlaces} profileById={profileById} userLocation={userLocation} selectedId={selectedPlace?.id} onSelect={selectPlace} />
+            <PlacesPreview places={visiblePlaces} profileById={profileById} currentProfile={profile} userLocation={userLocation} selectedId={selectedPlace?.id} onSelect={selectPlace} />
           </div>
         ) : sheetMode === "filters" ? (
           <div className="space-y-3">
             <FiltersBar active={filters} onChange={onFiltersChange} sort={sort} onSortChange={onSortChange} showSort />
-            <PlacesPreview places={visiblePlaces} profileById={profileById} userLocation={userLocation} selectedId={selectedPlace?.id} onSelect={selectPlace} />
+            <PlacesPreview places={visiblePlaces} profileById={profileById} currentProfile={profile} userLocation={userLocation} selectedId={selectedPlace?.id} onSelect={selectPlace} />
           </div>
         ) : sheetMode === "route" ? (
-          <MyRouteView places={places} profile={profile} userLocation={userLocation} onSelect={selectPlace} onUseLocation={onUseLocation} />
+          <MyRouteView places={places} profile={profile} profileById={profileById} userLocation={userLocation} onSelect={selectPlace} onUseLocation={onUseLocation} />
         ) : sheetMode === "stats" ? (
           <div className="p-3">
             <StatsPanel places={places} profiles={profiles} />
@@ -283,11 +283,11 @@ export function MobileMapScreen({
           <AdminPage places={places} profiles={profiles} refresh={refresh} />
         ) : bottomSheetState === "collapsed" ? (
           <div className="space-y-2">
-            <PlacesPreview places={visiblePlaces} profileById={profileById} userLocation={userLocation} selectedId={selectedPlace?.id} onSelect={selectPlace} />
+            <PlacesPreview places={visiblePlaces} profileById={profileById} currentProfile={profile} userLocation={userLocation} selectedId={selectedPlace?.id} onSelect={selectPlace} />
           </div>
         ) : (
           <div className="space-y-3">
-            <NearbySuggestions className="mx-4" places={places} userLocation={userLocation} onSelect={selectPlace} />
+            <NearbySuggestions className="mx-4" places={places} profileById={profileById} userLocation={userLocation} onSelect={selectPlace} />
             <PlaceList
               places={visiblePlaces}
               profileById={profileById}

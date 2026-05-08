@@ -1,19 +1,23 @@
 "use client";
 
 import { X } from "lucide-react";
-import type { Place, Priority } from "@/types";
+import type { Place, Priority, Profile } from "@/types";
 import { getPlaceStatusLabel } from "@/lib/labels";
 import { isOpenNow } from "@/lib/place-utils";
-import { StatusBadge } from "./badges";
+import { AssignmentNoticeChip, CoverageChips, StatusBadge } from "./badges";
 
 export function PlacePreviewCard({
   place,
+  profileById,
+  currentProfile,
   canChangePriority = false,
   onChangePriority,
   onClose,
   onDetails
 }: {
   place: Place | null;
+  profileById: Map<string, Profile>;
+  currentProfile?: Profile;
   canChangePriority?: boolean;
   onChangePriority?: (place: Place, priority: Priority) => Promise<void>;
   onClose: () => void;
@@ -29,6 +33,8 @@ export function PlacePreviewCard({
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-bold text-ink">{place.place_number ? `${place.place_number} · ` : ""}{place.name}</p>
             <StatusBadge status={place.status} />
+            <AssignmentNoticeChip place={place} currentProfileId={currentProfile?.id} />
+            <CoverageChips place={place} profileById={profileById} />
           </div>
           <p className="mt-1 text-sm text-ink/65">{getPlaceStatusLabel(place.status)}</p>
         </div>

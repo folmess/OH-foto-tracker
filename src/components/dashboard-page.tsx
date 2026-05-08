@@ -5,7 +5,7 @@ import Image from "next/image";
 import { Footprints, List, LocateFixed, LogOut, Map, Shield } from "lucide-react";
 import type { FilterKey, LocationPoint, Place, Priority, SortKey } from "@/types";
 import { useAppData } from "@/hooks/use-app-data";
-import { filterPlaces, sortPlaces } from "@/lib/place-utils";
+import { filterPlaces, getActiveAssignments, getPhotoSessions, sortPlaces } from "@/lib/place-utils";
 import { supabase } from "@/lib/supabase";
 import { LoginPage } from "./login-page";
 import { FiltersBar } from "./filters-bar";
@@ -77,16 +77,16 @@ export function DashboardPage() {
     if (!detailPlace) return;
     const updated = places.find((place) => place.id === detailPlace.id);
     if (!updated) return;
-    if (updated.status === "completed" && detailPlace.status !== "completed") {
-      const who = updated.completed_by ? profileById.get(updated.completed_by)?.full_name : "otro usuario";
+    const nextSessions = getPhotoSessions(updated);
+    const previousSessions = getPhotoSessions(detailPlace);
+    if (nextSessions.length > previousSessions.length) {
+      const who = profileById.get(nextSessions[0]?.photographer_id ?? "")?.full_name ?? "otro usuario";
       setNotice(`${updated.place_number ? `${updated.place_number} · ` : ""}${updated.name} fue fotografiado por ${who ?? "otro usuario"}.`);
     }
-    if (
-      updated.assigned_photographer_id &&
-      updated.assigned_photographer_id !== detailPlace.assigned_photographer_id &&
-      updated.assigned_photographer_id !== profile?.id
-    ) {
-      const who = profileById.get(updated.assigned_photographer_id)?.full_name ?? "otro usuario";
+    const previousAssignees = new Set(getActiveAssignments(detailPlace).map((assignment) => assignment.photographer_id));
+    const newAssignment = getActiveAssignments(updated).find((assignment) => !previousAssignees.has(assignment.photographer_id) && assignment.photographer_id !== profile?.id);
+    if (newAssignment) {
+      const who = profileById.get(newAssignment.photographer_id)?.full_name ?? "otro usuario";
       setNotice(`${updated.place_number ? `${updated.place_number} · ` : ""}${updated.name} ahora esta asignado a ${who}.`);
     }
     if (updated !== detailPlace) setDetailPlace(updated);
@@ -230,13 +230,15 @@ export function DashboardPage() {
         {mode === "admin" ? (
           <AdminPage places={places} profiles={profiles} refresh={refresh} />
         ) : mode === "route" ? (
-          <MyRouteView places={places} profile={profile} userLocation={userLocation} onSelect={setDetailPlace} onUseLocation={requestLocation} />
+          <MyRouteView places={places} profile={profile} profileById={profileById} userLocation={userLocation} onSelect={setDetailPlace} onUseLocation={requestLocation} />
         ) : (
           <div className="relative h-full md:grid md:grid-cols-[1fr_430px]">
             <div className={`${mode === "list" ? "hidden md:block" : "block"} relative h-full pb-[34vh] md:pb-0`}>
               <MapViewDynamic places={visiblePlaces} profileById={profileById} selectedPlace={previewPlace ?? detailPlace} userLocation={userLocation} onSelect={setPreviewPlace} />
               <PlacePreviewCard
                 place={previewPlace}
+                profileById={profileById}
+                currentProfile={profile}
                 canChangePriority={profile.role === "admin"}
                 onChangePriority={changePlacePriority}
                 onClose={() => setPreviewPlace(null)}
@@ -260,7 +262,7 @@ export function DashboardPage() {
                   <span className="h-1.5 w-12 rounded-full bg-black/20" />
                 </button>
               )}
-              <NearbySuggestions className="m-3" places={places} userLocation={userLocation} onSelect={mode === "map" ? setPreviewPlace : setDetailPlace} />
+              <NearbySuggestions className="m-3" places={places} profileById={profileById} userLocation={userLocation} onSelect={mode === "map" ? setPreviewPlace : setDetailPlace} />
               <PlaceList
                 places={visiblePlaces}
                 profileById={profileById}

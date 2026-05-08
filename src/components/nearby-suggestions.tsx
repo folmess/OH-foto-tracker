@@ -3,17 +3,20 @@
 import { useState } from "react";
 import type { HTMLAttributes } from "react";
 import { MapPin } from "lucide-react";
-import type { LocationPoint, Place } from "@/types";
-import { calculateDistance, formatDistance } from "@/lib/place-utils";
+import type { LocationPoint, Place, Profile } from "@/types";
+import { calculateDistance, formatDistance, isPlaceFullyCompleted } from "@/lib/place-utils";
 import { supabase } from "@/lib/supabase";
+import { CoverageChips } from "./badges";
 
 export function NearbySuggestions({
   places,
+  profileById,
   userLocation,
   onSelect,
   className = ""
 }: {
   places: Place[];
+  profileById: Map<string, Profile>;
   userLocation?: LocationPoint | null;
   onSelect: (place: Place) => void;
   className?: HTMLAttributes<HTMLElement>["className"];
@@ -22,7 +25,7 @@ export function NearbySuggestions({
   if (!userLocation) return null;
 
   const nearby = places
-    .filter((place) => place.status !== "completed" && place.status !== "skipped")
+    .filter((place) => !isPlaceFullyCompleted(place) && place.status !== "skipped")
     .map((place) => ({ place, distance: calculateDistance(userLocation.lat, userLocation.lng, place.lat, place.lng) }))
     .filter((item) => item.distance <= 500)
     .sort((a, b) => a.distance - b.distance)
@@ -87,6 +90,9 @@ export function NearbySuggestions({
           <button key={place.id} onClick={() => onSelect(place)} className="block w-full rounded-md bg-field p-2 text-left text-sm">
             <span className="font-semibold">{place.place_number ? `${place.place_number} - ` : ""}{place.name}</span>
             <span className="ml-2 text-river">{formatDistance(distance)}</span>
+            <span className="mt-1 flex flex-wrap gap-1.5">
+              <CoverageChips place={place} profileById={profileById} />
+            </span>
           </button>
         ))}
       </div>

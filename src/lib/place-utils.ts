@@ -127,9 +127,48 @@ export function closesSoon(slotsOrPlace: OpeningSlot[] | Place, date = new Date(
   return closeMinutes - now <= thresholdMinutes;
 }
 
+export function getActiveAssignments(place: Place) {
+  return (place.assignments ?? []).filter((assignment) => assignment.status === "assigned" || assignment.status === "in_progress");
+}
+
+export function getPhotoSessions(place: Place) {
+  return [...(place.photo_sessions ?? [])].sort((a, b) => b.photographed_at.localeCompare(a.photographed_at));
+}
+
+export function hasActiveAssignments(place: Place) {
+  return getActiveAssignments(place).length > 0;
+}
+
+export function hasPhotoSessions(place: Place) {
+  return getPhotoSessions(place).length > 0;
+}
+
+export function isAssignedToProfile(place: Place, profileId?: string) {
+  if (!profileId) return false;
+  return getActiveAssignments(place).some((assignment) => assignment.photographer_id === profileId);
+}
+
+export function isAssignedToAnotherProfile(place: Place, profileId?: string) {
+  const assignments = getActiveAssignments(place);
+  if (!assignments.length) return false;
+  if (!profileId) return true;
+  return assignments.some((assignment) => assignment.photographer_id !== profileId);
+}
+
+export function isPlaceFullyCompleted(place: Place) {
+  return hasPhotoSessions(place) && !hasActiveAssignments(place) && place.status !== "skipped";
+}
+
+export function getPrimaryAssignedPhotographer(place: Place, profileById: Map<string, Profile>) {
+  const firstAssignment = getActiveAssignments(place)[0];
+  if (firstAssignment) return profileById.get(firstAssignment.photographer_id) ?? null;
+  if (place.assigned_photographer_id) return profileById.get(place.assigned_photographer_id) ?? null;
+  return null;
+}
+
 export function getMarkerStyle(place: Place, photographer?: Profile | null) {
   return {
-    color: place.assigned_photographer_id && photographer ? photographer.color : statusColors[place.status],
+    color: photographer ? photographer.color : statusColors[place.status],
     borderColor: statusColors[place.status]
   };
 }
@@ -152,11 +191,11 @@ export function filterPlaces(
   if (filters.has("all") || filters.size === 0) return places;
   return places.filter((place) => {
     if (filters.has("pending") && place.status !== "pending") return false;
-    if (filters.has("unassigned") && place.assigned_photographer_id) return false;
+    if (filters.has("unassigned") && hasActiveAssignments(place)) return false;
     if (filters.has("assigned") && place.status !== "assigned") return false;
-    if (filters.has("mine") && place.assigned_photographer_id !== userId) return false;
+    if (filters.has("mine") && !isAssignedToProfile(place, userId)) return false;
     if (filters.has("in_progress") && place.status !== "in_progress") return false;
-    if (filters.has("completed") && place.status !== "completed") return false;
+    if (filters.has("completed") && !isPlaceFullyCompleted(place)) return false;
     if (filters.has("issue") && place.status !== "issue") return false;
     if (filters.has("high") && place.priority !== "high") return false;
     const slots = getOpeningSlots(place);

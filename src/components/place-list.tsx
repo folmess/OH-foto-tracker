@@ -3,7 +3,7 @@
 import { SearchX } from "lucide-react";
 
 import type { LocationPoint, Place, Priority, Profile } from "@/types";
-import { PhotographerBadge, PriorityBadge, StatusBadge } from "./badges";
+import { AssignmentNoticeChip, CoverageChips, PriorityBadge, StatusBadge } from "./badges";
 import { calculateDistance, closesSoon, formatDistance, todayHours } from "@/lib/place-utils";
 
 export function PlaceList({
@@ -48,6 +48,7 @@ export function PlaceList({
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <StatusBadge status={place.status} />
+              <AssignmentNoticeChip place={place} currentProfileId={currentProfile?.id} />
               {canChangePriority ? (
                 <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()} className="inline-flex items-center rounded-full bg-mist px-2 py-1">
                   <select
@@ -64,7 +65,7 @@ export function PlaceList({
               ) : (
                 <PriorityBadge priority={place.priority} />
               )}
-              <PhotographerBadge profile={place.assigned_photographer_id ? profileById.get(place.assigned_photographer_id) : null} />
+              <CoverageChips place={place} profileById={profileById} showEmpty />
             </div>
             <div className="mt-2 flex items-center gap-2 text-xs font-semibold text-ink/60">
               <span>{todayHours(place)}</span>

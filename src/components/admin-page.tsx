@@ -6,7 +6,7 @@ import Papa from "papaparse";
 import type { City, OpeningSlot, Place, Priority, Profile, Role } from "@/types";
 import { supabase } from "@/lib/supabase";
 import { StatsPanel } from "./stats-panel";
-import { StatusBadge, PriorityBadge, PhotographerBadge } from "./badges";
+import { CoverageChips, StatusBadge, PriorityBadge, PhotographerBadge } from "./badges";
 import { AddressGeocoder } from "./address-geocoder";
 import { MiniMapPicker } from "./mini-map-picker";
 import { OpeningHoursEditor, slotsFromPreset } from "./opening-hours-editor";
@@ -66,6 +66,7 @@ export function AdminPage({ places, profiles, refresh }: { places: Place[]; prof
   const [editingPlace, setEditingPlace] = useState<Partial<Place>>({ priority: "medium", status: "pending", city: "Rosario" });
   const [openingSlots, setOpeningSlots] = useState<OpeningSlot[]>(slotsFromPreset("saturday_morning"));
   const [coordinatesAdjusted, setCoordinatesAdjusted] = useState(false);
+  const profileById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
 
   const validRows = useMemo(
     () =>
@@ -340,8 +341,8 @@ export function AdminPage({ places, profiles, refresh }: { places: Place[]; prof
             />
             <input type="color" className="h-11 rounded-md border p-1" value={editingProfile.color ?? "#147a73"} onChange={(event) => setEditingProfile({ ...editingProfile, color: event.target.value })} />
             <select className="rounded-md border p-2" value={editingProfile.role ?? "photographer"} onChange={(event) => setEditingProfile({ ...editingProfile, role: event.target.value as Role })}>
-              <option value="photographer">Photographer</option>
-              <option value="admin">Admin</option>
+              <option value="photographer">Fotografo</option>
+              <option value="admin">Admin + fotografo</option>
             </select>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editingProfile.active ?? true} onChange={(event) => setEditingProfile({ ...editingProfile, active: event.target.checked })} />Activo</label>
             {profileMessage && <p className="rounded-md bg-mist p-3 text-sm font-semibold md:col-span-6">{profileMessage}</p>}
@@ -366,7 +367,7 @@ export function AdminPage({ places, profiles, refresh }: { places: Place[]; prof
                     <td className="py-2 pr-4"><strong>{place.place_number ? `${place.place_number} · ` : ""}{place.name}</strong><br /><span className="text-ink/55">{place.full_address || place.address}</span><br /><span className="text-ink/55">{formatOpeningHours(getOpeningSlots(place))}</span></td>
                     <td><StatusBadge status={place.status} /></td>
                     <td><PriorityBadge priority={place.priority} /></td>
-                    <td><PhotographerBadge profile={place.assigned_photographer_id ? profiles.find((profile) => profile.id === place.assigned_photographer_id) : null} /></td>
+                    <td><div className="flex flex-wrap gap-1.5"><CoverageChips place={place} profileById={profileById} showEmpty /></div></td>
                     <td className="space-x-2">
                       <button onClick={() => editPlace(place)} className="rounded-md bg-ink px-3 py-2 font-semibold text-white">Editar</button>
                       <button onClick={() => deletePlace(place)} className="rounded-md bg-coral px-3 py-2 font-semibold text-white">Borrar</button>

@@ -1,9 +1,11 @@
 import type { Place, Profile } from "@/types";
+import { getPhotoSessions, isPlaceFullyCompleted } from "@/lib/place-utils";
 
 export function StatsPanel({ places, profiles }: { places: Place[]; profiles: Profile[] }) {
   const total = places.length;
   const count = (status: string) => places.filter((place) => place.status === status).length;
-  const completed = count("completed");
+  const completed = places.filter(isPlaceFullyCompleted).length;
+  const sessions = places.flatMap(getPhotoSessions);
   const pendingByPriority = {
     high: places.filter((place) => place.priority === "high" && place.status !== "completed" && place.status !== "skipped").length,
     medium: places.filter((place) => place.priority === "medium" && place.status !== "completed" && place.status !== "skipped").length,
@@ -11,7 +13,7 @@ export function StatsPanel({ places, profiles }: { places: Place[]; profiles: Pr
   };
   const byPhotographer = profiles.map((profile) => ({
     profile,
-    total: places.filter((place) => place.completed_by === profile.id).length
+    total: sessions.filter((session) => session.photographer_id === profile.id).length
   }));
 
   return (
@@ -22,6 +24,7 @@ export function StatsPanel({ places, profiles }: { places: Place[]; profiles: Pr
         ["Asignados", count("assigned")],
         ["En progreso", count("in_progress")],
         ["Completados", completed],
+        ["Sesiones", sessions.length],
         ["Problemas abiertos", count("issue")],
         ["Alta pendiente", pendingByPriority.high],
         ["% completado", total ? `${Math.round((completed / total) * 100)}%` : "0%"]

@@ -4,18 +4,38 @@ import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import { MapContainer, Marker, TileLayer, useMap } from "react-leaflet";
 import type { LocationPoint, Place, Profile } from "@/types";
-import { getMarkerStyle } from "@/lib/place-utils";
+import { getMarkerStyle, getPhotoSessions, getPrimaryAssignedPhotographer } from "@/lib/place-utils";
 
 function isValidPoint(point?: LocationPoint | null): point is LocationPoint {
   return !!point && Number.isFinite(point.lat) && Number.isFinite(point.lng);
 }
 
-function markerIcon(color: string, borderColor: string, label?: string | null, selected = false, isHigh = false) {
+const mdiCameraOutline =
+  "M20 5H16.83L15 3H9L7.17 5H4C2.9 5 2 5.9 2 7V19C2 20.1 2.9 21 4 21H20C21.1 21 22 20.1 22 19V7C22 5.9 21.1 5 20 5M20 19H4V7H8.05L9.88 5H14.12L15.95 7H20V19M12 8C9.24 8 7 10.24 7 13S9.24 18 12 18 17 15.76 17 13 14.76 8 12 8M12 16C10.34 16 9 14.66 9 13S10.34 10 12 10 15 11.34 15 13 13.66 16 12 16Z";
+const mdiArrowUpBold =
+  "M4 12L12 4L20 12H15V20H9V12H4Z";
+const mdiBlockHelper =
+  "M12 2A10 10 0 0 0 2 12A10 10 0 0 0 12 22A10 10 0 0 0 22 12A10 10 0 0 0 12 2M4 12A8 8 0 0 1 12 4C13.85 4 15.55 4.63 16.9 5.69L5.69 16.9C4.63 15.55 4 13.85 4 12M12 20C10.15 20 8.45 19.37 7.1 18.31L18.31 7.1C19.37 8.45 20 10.15 20 12A8 8 0 0 1 12 20Z";
+
+function badgeIcon(path: string) {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"></path></svg>`;
+}
+
+function markerBadges(place: Place) {
+  const badges: string[] = [];
+  if (place.priority === "high") badges.push(`<span class="place-marker-badge place-marker-badge-priority">${badgeIcon(mdiArrowUpBold)}</span>`);
+  if (place.status === "in_progress") badges.push(`<span class="place-marker-badge place-marker-badge-progress">${badgeIcon(mdiCameraOutline)}</span>`);
+  if (place.status === "skipped") badges.push(`<span class="place-marker-badge place-marker-badge-skipped">${badgeIcon(mdiBlockHelper)}</span>`);
+  if (getPhotoSessions(place).length > 0) badges.push('<span class="place-marker-badge place-marker-badge-completed">✓</span>');
+  return badges.join("");
+}
+
+function markerIcon(place: Place, color: string, borderColor: string, label?: string | null, selected = false) {
   const size = selected ? 42 : 34;
-  const extraClass = selected ? " place-marker-selected" : isHigh ? " place-marker-high" : "";
+  const extraClass = selected ? " place-marker-selected" : place.priority === "high" ? " place-marker-high" : "";
   return L.divIcon({
     className: "",
-    html: `<div class="place-marker${extraClass}" style="width:${size}px;height:${size}px;background:${color};border-color:${borderColor}">${label ?? ""}</div>`,
+    html: `<div class="place-marker-wrap" style="width:${size}px;height:${size}px"><div class="place-marker${extraClass}" style="width:${size}px;height:${size}px;background:${color};border-color:${borderColor}">${label ?? ""}</div>${markerBadges(place)}</div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2]
   });
@@ -94,7 +114,7 @@ function PlaceMarker({
   return (
     <Marker
       position={[place.lat, place.lng]}
-      icon={markerIcon(style.color, style.borderColor, place.place_number, selected, place.priority === "high")}
+      icon={markerIcon(place, style.color, style.borderColor, place.place_number, selected)}
       zIndexOffset={place.priority === "high" ? 200 : selected ? 1000 : 0}
       eventHandlers={{ click: () => onSelect(place) }}
     />
@@ -169,7 +189,7 @@ export function MapView({
       <FitPlaces places={places} fitBoundsKey={fitBoundsKey} focusBottomInset={focusBottomInset} />
       <UserLocationMarker userLocation={userLocation} />
       {places.filter(hasValidLocation).map((place) => {
-        const photographer = place.assigned_photographer_id ? profileById.get(place.assigned_photographer_id) : null;
+        const photographer = getPrimaryAssignedPhotographer(place, profileById);
         return <PlaceMarker key={place.id} place={place} photographer={photographer} selected={selectedPlace?.id === place.id} onSelect={onSelect} />;
       })}
     </MapContainer>

@@ -3,10 +3,10 @@
 import { useMemo, useState } from "react";
 import { ArrowLeft, ExternalLink, X, MapPin, Clock, MoreHorizontal, MessageSquare } from "lucide-react";
 import type { ActivityLog, LocationPoint, Place, Priority, Profile } from "@/types";
-import { PhotographerBadge, PriorityBadge, StatusBadge } from "./badges";
+import { AssignmentNoticeChip, CoverageChips, PriorityBadge, StatusBadge } from "./badges";
 import { ActivityLogView } from "./activity-log";
 import { supabase } from "@/lib/supabase";
-import { calculateDistance, formatDistance, formatOpeningHours, getOpeningSlots, todayHours, isOpenNow } from "@/lib/place-utils";
+import { calculateDistance, formatDistance, formatOpeningHours, getActiveAssignments, getOpeningSlots, getPhotoSessions, isAssignedToProfile, todayHours, isOpenNow } from "@/lib/place-utils";
 
 export function PlaceDetailSheetContent({
   place,
@@ -39,14 +39,16 @@ export function PlaceDetailSheetContent({
 
   const placeActivity = useMemo(() => activity.filter((item) => item.place_id === place?.id), [activity, place?.id]);
   const activePhotographers = useMemo(
-    () => profiles.filter((profile) => profile.active && profile.role === "photographer").sort((a, b) => a.full_name.localeCompare(b.full_name, "es")),
+    () => profiles.filter((profile) => profile.active && (profile.role === "photographer" || profile.role === "admin")).sort((a, b) => a.full_name.localeCompare(b.full_name, "es")),
     [profiles]
   );
   if (!place) return null;
   const currentPlace = place;
 
-  const assignedToMe = currentPlace.assigned_photographer_id === currentProfile.id;
-  const canUnassign = assignedToMe || currentProfile.role === "admin";
+  const activeAssignments = getActiveAssignments(currentPlace);
+  const photoSessions = getPhotoSessions(currentPlace);
+  const assignedToMe = isAssignedToProfile(currentPlace, currentProfile.id);
+  const canUnassign = assignedToMe;
   const isAdmin = currentProfile.role === "admin";
   const distance = userLocation ? calculateDistance(userLocation.lat, userLocation.lng, place.lat, place.lng) : null;
   const open = isOpenNow(place);
@@ -78,38 +80,33 @@ export function PlaceDetailSheetContent({
   }
 
   async function assignTo(photographerId: string) {
-    if (!isAdmin) return;
+    if (!isAdmin || !photographerId) return;
     setBusy(true);
     setError(null);
-    const nextAssignee = photographerId || null;
-    const nextStatus = nextAssignee
-      ? currentPlace.status === "pending"
-        ? "assigned"
-        : currentPlace.status
-      : currentPlace.status === "assigned" || currentPlace.status === "in_progress"
-        ? "pending"
-        : currentPlace.status;
-    const { error: updateError } = await supabase
-      .from("places")
-      .update({
-        assigned_photographer_id: nextAssignee,
-        status: nextStatus
-      })
-      .eq("id", currentPlace.id);
+    const { error: updateError } = await supabase.rpc("assign_place_to", {
+      target_place_id: currentPlace.id,
+      photographer_uuid: photographerId,
+      note_text: note || null
+    });
     if (updateError) {
       setBusy(false);
       setError(updateError.message);
       return;
     }
-    const assigneeName = nextAssignee ? profileById.get(nextAssignee)?.full_name ?? "fotografo" : null;
-    await supabase.from("activity_log").insert({
-      place_id: currentPlace.id,
-      photographer_id: currentProfile.id,
-      action: nextAssignee ? "assigned" : "unassigned",
-      note: nextAssignee ? `Asignado a ${assigneeName}` : "Asignacion liberada",
-      previous_status: currentPlace.status,
-      new_status: nextStatus
+    await refresh();
+    setBusy(false);
+  }
+
+  async function unassignPhotographer(photographerId: string) {
+    if (!isAdmin && photographerId !== currentProfile.id) return;
+    setBusy(true);
+    setError(null);
+    const { error: updateError } = await supabase.rpc("unassign_place", {
+      target_place_id: currentPlace.id,
+      note_text: note || null,
+      photographer_uuid: photographerId
     });
+    if (updateError) setError(updateError.message);
     await refresh();
     setBusy(false);
   }
@@ -130,7 +127,9 @@ export function PlaceDetailSheetContent({
       ? { label: "Asignarme", action: "assign" as const }
       : assignedToMe && place.status === "assigned"
         ? { label: "Marcar en progreso", action: "in_progress" as const }
-        : place.status === "in_progress"
+        : activeAssignments.length > 0 && !assignedToMe
+          ? { label: "Fotografiar igual", action: "completed" as const }
+          : place.status === "in_progress"
           ? { label: "Marcar fotografiado", action: "completed" as const }
           : null;
 
@@ -164,8 +163,9 @@ export function PlaceDetailSheetContent({
 
       <div className="mt-4 flex flex-wrap gap-2">
         <StatusBadge status={place.status} />
+        <AssignmentNoticeChip place={place} currentProfileId={currentProfile.id} />
         <PriorityBadge priority={place.priority} />
-        <PhotographerBadge profile={place.assigned_photographer_id ? profileById.get(place.assigned_photographer_id) : null} />
+        <CoverageChips place={place} profileById={profileById} showEmpty />
       </div>
 
       {error && <p className="mt-4 rounded-xl bg-coral/10 p-3 text-sm font-semibold text-coral">{error}</p>}
@@ -215,11 +215,11 @@ export function PlaceDetailSheetContent({
                   Asignar a
                   <select
                     disabled={busy}
-                    value={currentPlace.assigned_photographer_id ?? ""}
+                    value=""
                     onChange={(event) => void assignTo(event.target.value)}
                     className="rounded-lg border border-black/10 bg-white px-3 py-2 text-sm font-bold normal-case tracking-normal text-ink disabled:opacity-60"
                   >
-                    <option value="">Sin asignar</option>
+                    <option value="">Sumar fotografo</option>
                     {activePhotographers.map((profile) => (
                       <option key={profile.id} value={profile.id}>
                         {profile.full_name}
@@ -227,6 +227,27 @@ export function PlaceDetailSheetContent({
                     ))}
                   </select>
                 </label>
+                {activeAssignments.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {activeAssignments.map((assignment) => {
+                      const assignedProfile = profileById.get(assignment.photographer_id);
+                      return (
+                        <button
+                          key={assignment.id}
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void unassignPhotographer(assignment.photographer_id)}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-ink ring-1 ring-black/10 disabled:opacity-60"
+                          title="Liberar asignacion"
+                        >
+                          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: assignedProfile?.color ?? "#65706d" }} />
+                          {assignedProfile?.full_name ?? "Fotografo"}
+                          <X size={12} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 <label className="grid gap-1 text-xs font-extrabold uppercase tracking-wide text-ink/50">
                   Prioridad
                   <select
@@ -271,10 +292,17 @@ export function PlaceDetailSheetContent({
         </div>
       </div>
 
-      {place.completed_at && (
-        <p className="mt-4 rounded-xl bg-mist px-4 py-3 text-sm font-medium text-ink">
-          Fotografiado por {place.completed_by ? profileById.get(place.completed_by)?.full_name : "usuario"} el {new Date(place.completed_at).toLocaleString("es-AR")}.
-        </p>
+      {photoSessions.length > 0 && (
+        <div className="mt-4 rounded-xl bg-mist px-4 py-3 text-sm font-medium text-ink">
+          <p className="font-bold">{photoSessions.length === 1 ? "1 sesion fotografica" : `${photoSessions.length} sesiones fotograficas`}</p>
+          <div className="mt-2 space-y-1">
+            {photoSessions.map((session, index) => (
+              <p key={session.id}>
+                #{photoSessions.length - index} por {profileById.get(session.photographer_id)?.full_name ?? "usuario"} el {new Date(session.photographed_at).toLocaleString("es-AR")}.
+              </p>
+            ))}
+          </div>
+        </div>
       )}
 
       {place.notes && (
