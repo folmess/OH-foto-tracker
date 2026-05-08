@@ -10,7 +10,7 @@ import { getSupabaseConfigError } from "@/lib/env";
 export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPasswordLogin, setShowPasswordLogin] = useState(false);
+  const [useMagicLink, setUseMagicLink] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -23,19 +23,32 @@ export function LoginPage() {
     setLoading(true);
     setMessage(null);
     const redirectTo = window.location.origin;
-    const result = showPasswordLogin
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
-    setLoading(false);
+    const result = useMagicLink
+      ? await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } })
+      : await supabase.auth.signInWithPassword({ email, password });
     if (result.error) {
+      setLoading(false);
       setMessage(result.error.message);
       return;
     }
-    if (!showPasswordLogin) setMessage("Te enviamos un link de acceso. Revisa tu email. El link puede tardar unos segundos. Revisa spam si no llega.");
+    if (useMagicLink) {
+      setLoading(false);
+      setMessage("Te enviamos un link de acceso. Revisa tu email. El link puede tardar unos segundos. Revisa spam si no llega.");
+    }
   }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#0f351b] via-[#153d22] to-[#1a5c2e] p-5">
+      {loading && !useMagicLink && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-field p-5">
+          <div className="flex animate-pulse flex-col items-center">
+            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-[#9068a5]/10 shadow-inner ring-1 ring-[#9068a5]/20">
+              <Image src="/OHLOGO.avif" alt="Open House Rosario" width={58} height={58} priority className="h-14 w-14 object-contain grayscale" />
+            </div>
+            <p className="mt-4 text-sm font-bold tracking-wide text-[#9068a5]">Cargando OH Foto Tracker</p>
+          </div>
+        </div>
+      )}
       <div className="w-full max-w-sm animate-fade-in">
         <div className="flex justify-center">
           <Image src="/OHLOGO.avif" alt="Open House Rosario" width={168} height={168} priority className="mb-6 h-auto w-40 drop-shadow-lg" />
@@ -54,7 +67,7 @@ export function LoginPage() {
                 required
               />
             </label>
-            {showPasswordLogin && (
+            {!useMagicLink && (
               <label className="block text-sm font-semibold text-ink">
                 Contraseña
                 <input
@@ -79,17 +92,17 @@ export function LoginPage() {
             className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#9068a5] px-4 py-3.5 font-bold text-white shadow-lg shadow-[#9068a5]/20 transition active:scale-[0.98] disabled:opacity-60"
           >
             {loading && <Loader2 size={18} className="animate-spin" />}
-            {loading ? "Ingresando..." : showPasswordLogin ? "Ingresar con contraseña" : "Enviarme link de acceso"}
+            {loading ? "Ingresando..." : useMagicLink ? "Enviarme link de acceso" : "Ingresar con contraseña"}
           </button>
           <button
             type="button"
             onClick={() => {
-              setShowPasswordLogin((value) => !value);
+              setUseMagicLink((value) => !value);
               setMessage(null);
             }}
             className="mt-4 w-full rounded-xl px-4 py-2.5 text-sm font-bold text-ink/55 transition hover:bg-mist hover:text-ink active:scale-[0.98]"
           >
-            {showPasswordLogin ? "Usar link de acceso por email" : "Ingresar con contraseña"}
+            {useMagicLink ? "Ingresar con contraseña" : "Usar link de acceso por email"}
           </button>
         </form>
       </div>

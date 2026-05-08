@@ -45,8 +45,8 @@ function RecenterMap({ center, focusBottomInset = 0 }: { center?: LocationPoint 
       const zoom = Number.isFinite(currentZoom) ? Math.max(currentZoom, 16) : 16;
       
       const targetPoint = map.project([target.lat, target.lng], zoom);
-      const offset = Math.max(0, Math.min(focusBottomInset, size.y * 0.72)) / 2;
-      targetPoint.y -= offset;
+      const offset = Math.max(0, Math.min(focusBottomInset * 0.58, size.y * 0.46));
+      targetPoint.y += offset;
       const finalCenter = map.unproject(targetPoint, zoom);
       
       map.setView(finalCenter, zoom, { animate: true, duration: 0.45 });

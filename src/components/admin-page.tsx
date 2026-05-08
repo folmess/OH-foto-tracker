@@ -34,6 +34,10 @@ type CsvPlace = {
   sunday_afternoon_close?: string;
 };
 
+type ProfileForm = Partial<Profile> & {
+  password?: string;
+};
+
 function addDetailedSlot(slots: OpeningSlot[], row: CsvPlace, day: "saturday" | "sunday", period: "morning" | "afternoon") {
   const open = row[`${day}_${period}_open` as keyof CsvPlace];
   const close = row[`${day}_${period}_close` as keyof CsvPlace];
@@ -56,7 +60,9 @@ export function AdminPage({ places, profiles, refresh }: { places: Place[]; prof
   const [csvRows, setCsvRows] = useState<CsvPlace[]>([]);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
-  const [editingProfile, setEditingProfile] = useState<Partial<Profile>>({ color: "#147a73", role: "photographer", active: true });
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [editingProfile, setEditingProfile] = useState<ProfileForm>({ color: "#147a73", role: "photographer", active: true });
   const [editingPlace, setEditingPlace] = useState<Partial<Place>>({ priority: "medium", status: "pending", city: "Rosario" });
   const [openingSlots, setOpeningSlots] = useState<OpeningSlot[]>(slotsFromPreset("saturday_morning"));
   const [coordinatesAdjusted, setCoordinatesAdjusted] = useState(false);
@@ -147,21 +153,48 @@ export function AdminPage({ places, profiles, refresh }: { places: Place[]; prof
 
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
-    if (!editingProfile.id || !editingProfile.full_name || !editingProfile.email) return;
+    if (savingProfile) return;
+    if (!editingProfile.full_name?.trim()) return setProfileMessage("El nombre es obligatorio.");
+    if (!editingProfile.email?.trim()) return setProfileMessage("El email es obligatorio.");
+    if (!editingProfile.id && !editingProfile.password?.trim()) return setProfileMessage("La contraseña es obligatoria para crear un fotografo.");
     setMessage(null);
-    const payload = {
-      id: editingProfile.id,
-      full_name: editingProfile.full_name,
-      email: editingProfile.email,
-      color: editingProfile.color || "#147a73",
-      role: (editingProfile.role || "photographer") as Role,
-      active: editingProfile.active ?? true
-    };
-    const { error } = await supabase.from("profiles").upsert(payload);
-    setMessage(error ? error.message : "Fotografo guardado.");
-    if (!error) {
-      setEditingProfile({ color: "#147a73", role: "photographer", active: true });
-      await refresh();
+    setProfileMessage(null);
+    setSavingProfile(true);
+    const { data: sessionResult } = await supabase.auth.getSession();
+    const token = sessionResult.session?.access_token;
+    if (!token) {
+      setProfileMessage("No se encontro una sesion activa de admin.");
+      setSavingProfile(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/admin/profiles", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          id: editingProfile.id,
+          full_name: editingProfile.full_name,
+          email: editingProfile.email,
+          password: editingProfile.password || undefined,
+          color: editingProfile.color || "#147a73",
+          role: (editingProfile.role || "photographer") as Role,
+          active: editingProfile.active ?? true
+        })
+      });
+      const result = (await response.json().catch(() => ({}))) as { error?: string };
+      setProfileMessage(response.ok ? "Fotografo guardado." : result.error || "No se pudo guardar el fotografo.");
+      if (response.ok) {
+        setEditingProfile({ color: "#147a73", role: "photographer", active: true });
+        await refresh();
+      }
+    } catch {
+      setProfileMessage("No se pudo conectar con el servidor.");
+    } finally {
+      setSavingProfile(false);
     }
   }
 
@@ -294,20 +327,31 @@ export function AdminPage({ places, profiles, refresh }: { places: Place[]; prof
         <section className="rounded-lg bg-white p-4 shadow-sm">
           <h3 className="font-bold">Fotografos</h3>
           <form onSubmit={saveProfile} className="mt-3 grid gap-2 md:grid-cols-6">
-            <input placeholder="UUID auth user" className="rounded-md border p-2 md:col-span-2" value={editingProfile.id ?? ""} onChange={(event) => setEditingProfile({ ...editingProfile, id: event.target.value })} required />
-            <input placeholder="Nombre" className="rounded-md border p-2" value={editingProfile.full_name ?? ""} onChange={(event) => setEditingProfile({ ...editingProfile, full_name: event.target.value })} required />
-            <input placeholder="Email" type="email" className="rounded-md border p-2" value={editingProfile.email ?? ""} onChange={(event) => setEditingProfile({ ...editingProfile, email: event.target.value })} required />
+            <input placeholder="Nombre" className="rounded-md border p-2 md:col-span-2" value={editingProfile.full_name ?? ""} onChange={(event) => setEditingProfile({ ...editingProfile, full_name: event.target.value })} required />
+            <input placeholder="Email" type="email" className="rounded-md border p-2 md:col-span-2" value={editingProfile.email ?? ""} onChange={(event) => setEditingProfile({ ...editingProfile, email: event.target.value })} required />
+            <input
+              placeholder={editingProfile.id ? "Nueva contraseña (opcional)" : "Contraseña"}
+              type="password"
+              className="rounded-md border p-2"
+              value={editingProfile.password ?? ""}
+              onChange={(event) => setEditingProfile({ ...editingProfile, password: event.target.value })}
+              minLength={6}
+              required={!editingProfile.id}
+            />
             <input type="color" className="h-11 rounded-md border p-1" value={editingProfile.color ?? "#147a73"} onChange={(event) => setEditingProfile({ ...editingProfile, color: event.target.value })} />
             <select className="rounded-md border p-2" value={editingProfile.role ?? "photographer"} onChange={(event) => setEditingProfile({ ...editingProfile, role: event.target.value as Role })}>
               <option value="photographer">Photographer</option>
               <option value="admin">Admin</option>
             </select>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editingProfile.active ?? true} onChange={(event) => setEditingProfile({ ...editingProfile, active: event.target.checked })} />Activo</label>
-            <button className="rounded-md bg-ink px-4 py-3 font-semibold text-white md:col-span-6">Guardar fotografo</button>
+            {profileMessage && <p className="rounded-md bg-mist p-3 text-sm font-semibold md:col-span-6">{profileMessage}</p>}
+            <button disabled={savingProfile} className="rounded-md bg-ink px-4 py-3 font-semibold text-white disabled:opacity-60 md:col-span-6">
+              {savingProfile ? "Guardando..." : "Guardar fotografo"}
+            </button>
           </form>
           <div className="mt-3 flex flex-wrap gap-2">
             {profiles.map((profile) => (
-              <button key={profile.id} onClick={() => setEditingProfile(profile)}><PhotographerBadge profile={profile} /></button>
+              <button key={profile.id} onClick={() => setEditingProfile({ ...profile, password: "" })}><PhotographerBadge profile={profile} /></button>
             ))}
           </div>
         </section>

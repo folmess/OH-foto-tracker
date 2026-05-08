@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import type { BottomSheetState } from "@/types";
 
 const NAV_HEIGHT = 78;
-const PEEK_HEIGHT = 258;
+const PEEK_HEIGHT = 156;
 const TOP_MARGIN = 92;
 
 function clamp(value: number, min: number, max: number) {
@@ -48,7 +48,7 @@ export function BottomSheetScaffold({
     const expanded = Math.max(PEEK_HEIGHT, viewportHeight - NAV_HEIGHT - TOP_MARGIN);
     return {
       collapsed: Math.min(PEEK_HEIGHT, expanded),
-      partial: Math.min(Math.round(viewportHeight * 0.54), expanded),
+      partial: Math.min(Math.round(viewportHeight * 0.3), expanded),
       expanded
     };
   }, [viewportHeight]);
@@ -108,16 +108,16 @@ export function BottomSheetScaffold({
           {(title || badge) && (
             <button
               onClick={() => onStateChange(state === "expanded" ? "partial" : "expanded")}
-              className="flex min-h-14 w-full items-center justify-between gap-4 text-left"
+              className="flex min-h-11 w-full items-center justify-between gap-3 text-left"
               aria-label={state === "expanded" ? "Contraer panel" : "Expandir panel"}
             >
               {title && (
-                <span>
-                  <span className="block text-base font-extrabold text-ink">{title}</span>
-                  {summary && <span className="mt-0.5 block text-xs font-semibold text-ink/55">{summary}</span>}
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-extrabold text-ink">{title}</span>
+                  {summary && <span className="mt-0.5 block truncate text-[11px] font-semibold text-ink/55">{summary}</span>}
                 </span>
               )}
-              {badge && <span className="shrink-0 rounded-full bg-mist px-3 py-1 text-xs font-bold text-ink">{badge}</span>}
+              {badge && <span className="shrink-0 rounded-full bg-mist px-2.5 py-1 text-[11px] font-bold text-ink">{badge}</span>}
             </button>
           )}
           {headerActions && (

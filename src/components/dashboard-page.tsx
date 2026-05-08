@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { Footprints, List, LocateFixed, LogOut, Map, Shield } from "lucide-react";
-import type { FilterKey, LocationPoint, Place, SortKey } from "@/types";
+import type { FilterKey, LocationPoint, Place, Priority, SortKey } from "@/types";
 import { useAppData } from "@/hooks/use-app-data";
 import { filterPlaces, sortPlaces } from "@/lib/place-utils";
 import { supabase } from "@/lib/supabase";
@@ -52,6 +53,12 @@ export function DashboardPage() {
     window.localStorage.setItem("tracker.filters", Array.from(filters).join(","));
     window.localStorage.setItem("tracker.sort", sort);
   }, [filters, sort]);
+
+  useEffect(() => {
+    if (!locationError) return;
+    const timeout = window.setTimeout(() => setLocationError(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [locationError]);
 
   const visiblePlaces = useMemo(() => {
     const filtered = filterPlaces(places, filters, profile?.id, userLocation);
@@ -104,14 +111,34 @@ export function DashboardPage() {
     );
   }
 
+  async function changePlacePriority(place: Place, priority: Priority) {
+    if (!profile || profile.role !== "admin" || place.priority === priority) return;
+    const { error } = await supabase
+      .from("places")
+      .update({ priority })
+      .eq("id", place.id);
+    if (error) {
+      setNotice(error.message);
+      return;
+    }
+    await supabase.from("activity_log").insert({
+      place_id: place.id,
+      photographer_id: profile.id,
+      action: "priority_changed",
+      previous_status: place.priority,
+      new_status: priority
+    });
+    await refresh();
+  }
+
   if (loading) {
     return (
       <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-field p-5">
-        <div className="flex flex-col items-center animate-pulse">
-          <div className="h-20 w-20 rounded-3xl bg-mist flex items-center justify-center shadow-inner">
-            <span className="font-bebas text-3xl text-ink/30">OH</span>
+        <div className="flex animate-pulse flex-col items-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-[#9068a5]/10 shadow-inner ring-1 ring-[#9068a5]/20">
+            <Image src="/OHLOGO.avif" alt="Open House Rosario" width={58} height={58} priority className="h-14 w-14 object-contain grayscale" />
           </div>
-          <p className="mt-4 text-sm font-bold tracking-wide text-ink/50">Cargando Open House...</p>
+          <p className="mt-4 text-sm font-bold tracking-wide text-[#9068a5]">Cargando OH Foto Tracker</p>
         </div>
       </main>
     );
@@ -153,6 +180,7 @@ export function DashboardPage() {
           setDetailPlace(place);
           setPreviewPlace(null);
         }}
+        onChangePriority={changePlacePriority}
         onClearSelectedPlace={() => setDetailPlace(null)}
         onUseLocation={requestLocation}
         onClearNotice={() => setNotice(null)}
@@ -207,7 +235,13 @@ export function DashboardPage() {
           <div className="relative h-full md:grid md:grid-cols-[1fr_430px]">
             <div className={`${mode === "list" ? "hidden md:block" : "block"} relative h-full pb-[34vh] md:pb-0`}>
               <MapViewDynamic places={visiblePlaces} profileById={profileById} selectedPlace={previewPlace ?? detailPlace} userLocation={userLocation} onSelect={setPreviewPlace} />
-              <PlacePreviewCard place={previewPlace} onClose={() => setPreviewPlace(null)} onDetails={(place) => { setDetailPlace(place); setPreviewPlace(null); }} />
+              <PlacePreviewCard
+                place={previewPlace}
+                canChangePriority={profile.role === "admin"}
+                onChangePriority={changePlacePriority}
+                onClose={() => setPreviewPlace(null)}
+                onDetails={(place) => { setDetailPlace(place); setPreviewPlace(null); }}
+              />
               <MapLegend profiles={profiles} />
               <button onClick={requestLocation} className="absolute bottom-[calc(34vh+1rem)] right-4 z-[800] rounded-full bg-river p-4 text-white shadow-panel md:bottom-4" aria-label="Usar mi ubicacion">
                 <LocateFixed size={22} />
@@ -227,11 +261,31 @@ export function DashboardPage() {
                 </button>
               )}
               <NearbySuggestions className="m-3" places={places} userLocation={userLocation} onSelect={mode === "map" ? setPreviewPlace : setDetailPlace} />
-              <PlaceList places={visiblePlaces} profileById={profileById} userLocation={userLocation} selectedId={(previewPlace ?? detailPlace)?.id} onSelect={mode === "map" ? setPreviewPlace : setDetailPlace} />
+              <PlaceList
+                places={visiblePlaces}
+                profileById={profileById}
+                currentProfile={profile}
+                userLocation={userLocation}
+                selectedId={(previewPlace ?? detailPlace)?.id}
+                onSelect={mode === "map" ? setPreviewPlace : setDetailPlace}
+                onChangePriority={changePlacePriority}
+              />
             </div>
           </div>
         )}
-        {mode !== "admin" && <PlaceDrawer place={detailPlace} currentProfile={profile} profileById={profileById} activity={activity} userLocation={userLocation} onClose={() => setDetailPlace(null)} />}
+        {mode !== "admin" && (
+          <PlaceDrawer
+            place={detailPlace}
+            currentProfile={profile}
+            profiles={profiles}
+            profileById={profileById}
+            activity={activity}
+            userLocation={userLocation}
+            onChangePriority={changePlacePriority}
+            refresh={refresh}
+            onClose={() => setDetailPlace(null)}
+          />
+        )}
       </section>
     </main>
   );

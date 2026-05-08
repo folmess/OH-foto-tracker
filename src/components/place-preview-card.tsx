@@ -1,17 +1,21 @@
 "use client";
 
 import { X } from "lucide-react";
-import type { Place } from "@/types";
+import type { Place, Priority } from "@/types";
 import { getPlaceStatusLabel } from "@/lib/labels";
 import { isOpenNow } from "@/lib/place-utils";
 import { StatusBadge } from "./badges";
 
 export function PlacePreviewCard({
   place,
+  canChangePriority = false,
+  onChangePriority,
   onClose,
   onDetails
 }: {
   place: Place | null;
+  canChangePriority?: boolean;
+  onChangePriority?: (place: Place, priority: Priority) => Promise<void>;
   onClose: () => void;
   onDetails: (place: Place) => void;
 }) {
@@ -34,6 +38,20 @@ export function PlacePreviewCard({
       </div>
       <p className="mt-2 text-sm text-ink/65">{place.full_address || place.address || "Sin direccion"}</p>
       <p className={`mt-1 text-xs font-bold ${open ? "text-river" : "text-coral"}`}>{open ? "Abierto ahora" : "No figura abierto ahora"}</p>
+      {canChangePriority && onChangePriority && (
+        <label className="mt-3 flex items-center justify-between gap-3 rounded-md bg-field px-3 py-2 text-sm font-bold text-ink">
+          Prioridad
+          <select
+            value={place.priority}
+            onChange={(event) => void onChangePriority(place, event.target.value as Priority)}
+            className="rounded-md border border-black/10 bg-white px-2 py-1 text-sm font-bold"
+          >
+            <option value="high">Alta</option>
+            <option value="medium">Media</option>
+            <option value="low">Baja</option>
+          </select>
+        </label>
+      )}
       <button onClick={() => onDetails(place)} className="mt-3 w-full rounded-md bg-ink px-4 py-3 text-sm font-bold text-white">
         Detalles
       </button>

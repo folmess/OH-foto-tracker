@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { ActivityLog, BottomSheetState, FilterKey, LocationPoint, MobileTab, Place, Profile, SortKey } from "@/types";
+import { Search, X } from "lucide-react";
+import type { ActivityLog, BottomSheetState, FilterKey, LocationPoint, MobileTab, Place, Priority, Profile, SortKey } from "@/types";
 import { supabase } from "@/lib/supabase";
 import { BottomNavigationBar } from "./bottom-navigation-bar";
 import { BottomSheetScaffold } from "./bottom-sheet-scaffold";
 import { FiltersBar } from "./filters-bar";
 import { FloatingMapActions } from "./floating-map-actions";
-import { FloatingSearchBar } from "./floating-search-bar";
 import { MapViewport } from "./map-viewport";
 import { MyRouteView } from "./my-route-view";
 import { NearbySuggestions } from "./nearby-suggestions";
@@ -18,7 +18,7 @@ import { QuickFilterChips } from "./quick-filter-chips";
 import { StatsPanel } from "./stats-panel";
 import { AdminPage } from "./admin-page";
 
-type SheetMode = "list" | "detail" | "filters" | "route" | "stats" | "admin";
+type SheetMode = "list" | "detail" | "search" | "filters" | "route" | "stats" | "admin";
 
 const sortChips: { key: SortKey; label: string }[] = [
   { key: "recommended", label: "Recomendado" },
@@ -28,7 +28,7 @@ const sortChips: { key: SortKey; label: string }[] = [
 ];
 
 const NAV_HEIGHT = 78;
-const PEEK_HEIGHT = 258;
+const PEEK_HEIGHT = 156;
 const TOP_MARGIN = 92;
 
 function ListSortChips({
@@ -82,6 +82,7 @@ export function MobileMapScreen({
   onSearchChange,
   onSelectPlace,
   onClearSelectedPlace,
+  onChangePriority,
   onUseLocation,
   onClearNotice,
   refresh
@@ -104,6 +105,7 @@ export function MobileMapScreen({
   onSearchChange: (value: string) => void;
   onSelectPlace: (place: Place) => void;
   onClearSelectedPlace: () => void;
+  onChangePriority: (place: Place, priority: Priority) => Promise<void>;
   onUseLocation: () => void;
   onClearNotice: () => void;
   refresh: () => Promise<void>;
@@ -126,7 +128,7 @@ export function MobileMapScreen({
   const sheetVisibleHeight = useMemo(() => {
     const expanded = Math.max(PEEK_HEIGHT, viewportHeight - NAV_HEIGHT - TOP_MARGIN);
     if (bottomSheetState === "expanded") return expanded;
-    if (bottomSheetState === "partial") return Math.min(Math.round(viewportHeight * 0.54), expanded);
+    if (bottomSheetState === "partial") return Math.min(Math.round(viewportHeight * 0.3), expanded);
     return Math.min(PEEK_HEIGHT, expanded);
   }, [bottomSheetState, viewportHeight]);
 
@@ -134,7 +136,8 @@ export function MobileMapScreen({
 
   const sheetTitle = useMemo(() => {
     if (sheetMode === "detail" && selectedPlace) return null;
-    if (sheetMode === "filters") return "Filtros y busqueda";
+    if (sheetMode === "search") return "Buscar";
+    if (sheetMode === "filters") return "Filtros";
     if (sheetMode === "route") return "Mi recorrido";
     if (sheetMode === "stats") return "Estadisticas";
     if (sheetMode === "admin") return "Admin";
@@ -143,7 +146,8 @@ export function MobileMapScreen({
 
   const sheetSummary = useMemo(() => {
     if (sheetMode === "detail") return undefined;
-    if (sheetMode === "filters") return "Filter chips, orden y resultados";
+    if (sheetMode === "search") return searchQuery ? `${visiblePlaces.length} resultados para "${searchQuery}"` : "Lugar, numero o direccion";
+    if (sheetMode === "filters") return "Chips, orden y resultados";
     if (sheetMode === "route") return userLocation ? "Recomendaciones segun tu ubicacion" : "Activa tu ubicacion para sugerencias";
     if (sheetMode === "stats") return "Resumen del operativo";
     if (sheetMode === "admin") return "Gestion administrativa";
@@ -180,6 +184,11 @@ export function MobileMapScreen({
     setBottomSheetState("expanded");
   }
 
+  function openSearch() {
+    setSheetMode("search");
+    setBottomSheetState("partial");
+  }
+
   return (
     <main className="relative h-[100dvh] overflow-hidden bg-field md:hidden">
       <MapViewport
@@ -192,8 +201,7 @@ export function MobileMapScreen({
         onSelect={selectPlace}
       />
 
-      <div className="pointer-events-none fixed inset-x-0 top-0 z-[820] space-y-2 px-3 pt-[calc(env(safe-area-inset-top)+0.75rem)]">
-        <FloatingSearchBar value={searchQuery} onChange={onSearchChange} onOpenFilters={openFilters} onProfilePress={() => supabase.auth.signOut()} profileName={profile.full_name} />
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-[820] px-3 pt-[calc(env(safe-area-inset-top)+0.5rem)]">
         <QuickFilterChips active={filters} onChange={onFiltersChange} />
       </div>
 
@@ -207,7 +215,13 @@ export function MobileMapScreen({
       )}
 
       <div className="pointer-events-none fixed right-3 z-[810] transition-[bottom] duration-300 ease-[cubic-bezier(.2,.8,.2,1)]" style={{ bottom: `calc(${sheetVisibleHeight + NAV_HEIGHT}px + 16px + env(safe-area-inset-bottom))` }}>
-        <FloatingMapActions onUseLocation={onUseLocation} onFitPlaces={() => setFitBoundsKey((key) => key + 1)} onOpenFilters={openFilters} />
+        <FloatingMapActions
+          onUseLocation={onUseLocation}
+          onFitPlaces={() => setFitBoundsKey((key) => key + 1)}
+          onOpenSearch={openSearch}
+          onOpenFilters={openFilters}
+          onLogout={() => supabase.auth.signOut()}
+        />
       </div>
 
       <BottomSheetScaffold
@@ -222,15 +236,38 @@ export function MobileMapScreen({
           <PlaceDetailSheetContent
             place={selectedPlace}
             currentProfile={profile}
+            profiles={profiles}
             profileById={profileById}
             activity={activity}
             userLocation={userLocation}
+            onChangePriority={onChangePriority}
+            refresh={refresh}
             onBack={() => openList("partial")}
             onClose={() => {
               onClearSelectedPlace();
               openList("collapsed");
             }}
           />
+        ) : sheetMode === "search" ? (
+          <div className="space-y-3 px-4 pb-2">
+            <div className="flex min-h-11 items-center gap-2 rounded-full bg-field px-3 ring-1 ring-black/10">
+              <Search size={18} className="shrink-0 text-ink/55" aria-hidden="true" />
+              <input
+                value={searchQuery}
+                onChange={(event) => onSearchChange(event.target.value)}
+                className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-ink outline-none placeholder:text-ink/40"
+                placeholder="Buscar lugar o direccion"
+                aria-label="Buscar lugares"
+                autoFocus
+              />
+              {searchQuery && (
+                <button onClick={() => onSearchChange("")} className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-ink/65" aria-label="Limpiar busqueda">
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+            <PlacesPreview places={visiblePlaces} profileById={profileById} userLocation={userLocation} selectedId={selectedPlace?.id} onSelect={selectPlace} />
+          </div>
         ) : sheetMode === "filters" ? (
           <div className="space-y-3">
             <FiltersBar active={filters} onChange={onFiltersChange} sort={sort} onSortChange={onSortChange} showSort />
@@ -245,14 +282,21 @@ export function MobileMapScreen({
         ) : sheetMode === "admin" ? (
           <AdminPage places={places} profiles={profiles} refresh={refresh} />
         ) : bottomSheetState === "collapsed" ? (
-          <div className="space-y-3">
-            <NearbySuggestions className="mx-4" places={places} userLocation={userLocation} onSelect={selectPlace} />
+          <div className="space-y-2">
             <PlacesPreview places={visiblePlaces} profileById={profileById} userLocation={userLocation} selectedId={selectedPlace?.id} onSelect={selectPlace} />
           </div>
         ) : (
           <div className="space-y-3">
             <NearbySuggestions className="mx-4" places={places} userLocation={userLocation} onSelect={selectPlace} />
-            <PlaceList places={visiblePlaces} profileById={profileById} userLocation={userLocation} selectedId={selectedPlace?.id} onSelect={selectPlace} />
+            <PlaceList
+              places={visiblePlaces}
+              profileById={profileById}
+              currentProfile={profile}
+              userLocation={userLocation}
+              selectedId={selectedPlace?.id}
+              onSelect={selectPlace}
+              onChangePriority={onChangePriority}
+            />
           </div>
         )}
       </BottomSheetScaffold>

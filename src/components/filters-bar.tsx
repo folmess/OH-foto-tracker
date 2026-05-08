@@ -50,14 +50,14 @@ export function FiltersBar({
 
   return (
     <div className="space-y-2 border-b border-black/10 bg-white px-3 py-2">
-      <div className="scrollbar-none flex gap-2 overflow-x-auto">
+      <div className="scrollbar-none flex gap-1.5 overflow-x-auto">
         {filters.map((filter) => {
           const selected = active.has(filter.key);
           return (
             <button
               key={filter.key}
               onClick={() => toggle(filter.key)}
-              className={`shrink-0 rounded-full px-3 py-2 text-sm font-semibold ${selected ? "bg-ink text-white" : "bg-mist text-ink"}`}
+              className={`shrink-0 rounded-full px-2.5 py-1.5 text-xs font-semibold ${selected ? "bg-ink text-white" : "bg-mist text-ink"}`}
             >
               {filter.label}
             </button>

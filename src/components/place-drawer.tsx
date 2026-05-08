@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ArrowLeft, ExternalLink, X, MapPin, Clock, MoreHorizontal, MessageSquare } from "lucide-react";
-import type { ActivityLog, LocationPoint, Place, Profile } from "@/types";
+import type { ActivityLog, LocationPoint, Place, Priority, Profile } from "@/types";
 import { PhotographerBadge, PriorityBadge, StatusBadge } from "./badges";
 import { ActivityLogView } from "./activity-log";
 import { supabase } from "@/lib/supabase";
@@ -11,17 +11,23 @@ import { calculateDistance, formatDistance, formatOpeningHours, getOpeningSlots,
 export function PlaceDetailSheetContent({
   place,
   currentProfile,
+  profiles,
   profileById,
   activity,
   userLocation,
+  onChangePriority,
+  refresh,
   onClose,
   onBack
 }: {
   place: Place | null;
   currentProfile: Profile;
+  profiles: Profile[];
   profileById: Map<string, Profile>;
   activity: ActivityLog[];
   userLocation?: LocationPoint | null;
+  onChangePriority: (place: Place, priority: Priority) => Promise<void>;
+  refresh: () => Promise<void>;
   onClose: () => void;
   onBack?: () => void;
 }) {
@@ -32,11 +38,16 @@ export function PlaceDetailSheetContent({
   const [error, setError] = useState<string | null>(null);
 
   const placeActivity = useMemo(() => activity.filter((item) => item.place_id === place?.id), [activity, place?.id]);
+  const activePhotographers = useMemo(
+    () => profiles.filter((profile) => profile.active && profile.role === "photographer").sort((a, b) => a.full_name.localeCompare(b.full_name, "es")),
+    [profiles]
+  );
   if (!place) return null;
   const currentPlace = place;
 
   const assignedToMe = currentPlace.assigned_photographer_id === currentProfile.id;
   const canUnassign = assignedToMe || currentProfile.role === "admin";
+  const isAdmin = currentProfile.role === "admin";
   const distance = userLocation ? calculateDistance(userLocation.lat, userLocation.lng, place.lat, place.lng) : null;
   const open = isOpenNow(place);
 
@@ -64,6 +75,54 @@ export function PlaceDetailSheetContent({
     }
     setNote("");
     setShowNoteInput(false);
+  }
+
+  async function assignTo(photographerId: string) {
+    if (!isAdmin) return;
+    setBusy(true);
+    setError(null);
+    const nextAssignee = photographerId || null;
+    const nextStatus = nextAssignee
+      ? currentPlace.status === "pending"
+        ? "assigned"
+        : currentPlace.status
+      : currentPlace.status === "assigned" || currentPlace.status === "in_progress"
+        ? "pending"
+        : currentPlace.status;
+    const { error: updateError } = await supabase
+      .from("places")
+      .update({
+        assigned_photographer_id: nextAssignee,
+        status: nextStatus
+      })
+      .eq("id", currentPlace.id);
+    if (updateError) {
+      setBusy(false);
+      setError(updateError.message);
+      return;
+    }
+    const assigneeName = nextAssignee ? profileById.get(nextAssignee)?.full_name ?? "fotografo" : null;
+    await supabase.from("activity_log").insert({
+      place_id: currentPlace.id,
+      photographer_id: currentProfile.id,
+      action: nextAssignee ? "assigned" : "unassigned",
+      note: nextAssignee ? `Asignado a ${assigneeName}` : "Asignacion liberada",
+      previous_status: currentPlace.status,
+      new_status: nextStatus
+    });
+    await refresh();
+    setBusy(false);
+  }
+
+  async function changePriority(priority: Priority) {
+    if (!isAdmin || currentPlace.priority === priority) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onChangePriority(currentPlace, priority);
+    } finally {
+      setBusy(false);
+    }
   }
 
   const primary =
@@ -150,12 +209,45 @@ export function PlaceDetailSheetContent({
 
         {showMoreActions && (
           <div className="animate-slide-up grid grid-cols-2 gap-2 pt-2">
+            {isAdmin && (
+              <div className="col-span-2 grid gap-2 rounded-xl border border-black/10 bg-field p-3">
+                <label className="grid gap-1 text-xs font-extrabold uppercase tracking-wide text-ink/50">
+                  Asignar a
+                  <select
+                    disabled={busy}
+                    value={currentPlace.assigned_photographer_id ?? ""}
+                    onChange={(event) => void assignTo(event.target.value)}
+                    className="rounded-lg border border-black/10 bg-white px-3 py-2 text-sm font-bold normal-case tracking-normal text-ink disabled:opacity-60"
+                  >
+                    <option value="">Sin asignar</option>
+                    {activePhotographers.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.full_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-1 text-xs font-extrabold uppercase tracking-wide text-ink/50">
+                  Prioridad
+                  <select
+                    disabled={busy}
+                    value={currentPlace.priority}
+                    onChange={(event) => void changePriority(event.target.value as Priority)}
+                    className="rounded-lg border border-black/10 bg-white px-3 py-2 text-sm font-bold normal-case tracking-normal text-ink disabled:opacity-60"
+                  >
+                    <option value="high">Alta</option>
+                    <option value="medium">Media</option>
+                    <option value="low">Baja</option>
+                  </select>
+                </label>
+              </div>
+            )}
             <button disabled={busy} onClick={() => run("in_progress")} className="rounded-xl border border-amber/30 bg-amber/5 px-3 py-3 text-sm font-bold text-amber-700 transition active:scale-95 disabled:opacity-50">En progreso</button>
             <button disabled={busy} onClick={() => run("completed")} className="rounded-xl border border-river/30 bg-river/5 px-3 py-3 text-sm font-bold text-river transition active:scale-95 disabled:opacity-50">Fotografiado</button>
             <button disabled={busy} onClick={() => run("issue")} className="rounded-xl border border-coral/30 bg-coral/5 px-3 py-3 text-sm font-bold text-coral transition active:scale-95 disabled:opacity-50">Reportar problema</button>
             <button disabled={busy} onClick={() => run("skipped")} className="rounded-xl border border-ink/20 bg-ink/5 px-3 py-3 text-sm font-bold text-ink transition active:scale-95 disabled:opacity-50">Descartar</button>
             {canUnassign && <button disabled={busy} onClick={() => run("unassign")} className="col-span-2 rounded-xl border border-ink/10 bg-field px-3 py-3 text-sm font-bold text-ink transition active:scale-95 disabled:opacity-50">Liberar asignación</button>}
-            {currentProfile.role === "admin" && <button disabled={busy} onClick={() => run("reopen")} className="col-span-2 rounded-xl border border-ink/10 bg-field px-3 py-3 text-sm font-bold text-ink transition active:scale-95 disabled:opacity-50">Reabrir lugar (Admin)</button>}
+            {isAdmin && <button disabled={busy} onClick={() => run("reopen")} className="col-span-2 rounded-xl border border-ink/10 bg-field px-3 py-3 text-sm font-bold text-ink transition active:scale-95 disabled:opacity-50">Reabrir lugar (Admin)</button>}
           </div>
         )}
       </div>
@@ -203,9 +295,12 @@ export function PlaceDetailSheetContent({
 export function PlaceDrawer(props: {
   place: Place | null;
   currentProfile: Profile;
+  profiles: Profile[];
   profileById: Map<string, Profile>;
   activity: ActivityLog[];
   userLocation?: LocationPoint | null;
+  onChangePriority: (place: Place, priority: Priority) => Promise<void>;
+  refresh: () => Promise<void>;
   onClose: () => void;
 }) {
   if (!props.place) return null;
